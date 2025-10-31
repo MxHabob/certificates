@@ -3,135 +3,256 @@ import { devtools, persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 import type { Field } from "@/types/certificate";
 
-interface CertificateState {
+interface HistoryState {
+  past: CertificateState[];
+  future: CertificateState[];
+  push(s: CertificateState): void;
+  undo(): CertificateState | undefined;
+  redo(): CertificateState | undefined;
+}
+
+export interface CertificateState {
+  // data
   students: Record<string, any>[];
   columns: string[];
   templateFile: File | null;
   templateUrl: string;
-  templateAspectRatio: string | null;
+  templateAspect: string | null;
   pageWidth_mm: number | null;
   pageHeight_mm: number | null;
   fields: Field[];
-  selectedFieldId: string | null;
-  fileNameColumn: string | null;
+  selectedId: string | null;
+  fileNameCol: string | null;
+  zoom: number;               // canvas zoom (1 = 100%)
 
-  setStudents: (v: Record<string, any>[]) => void;
-  setColumns: (v: string[]) => void;
-  setTemplateFile: (f: File | null) => void;
-  setTemplateUrl: (u: string, aspect?: string, pageWidth_mm?: number, pageHeight_mm?: number) => void;
-  setFileNameColumn: (col: string | null) => void;
-  setSelectedFieldId: (id: string | null) => void;
+  // actions
+  setStudents(v: any[]): void;
+  setColumns(v: string[]): void;
+  setTemplate(f: File | null, url?: string, w?: number, h?: number): void;
+  setFileNameCol(c: string | null): void;
+  setSelected(id: string | null): void;
+  setZoom(z: number): void;
 
-  addStaticField: () => void;
-  addFieldFromColumn: (col: string, label?: string) => void;
-  updateField: (updates: Partial<Field>) => void;
-  updateFieldPosition: (id: string, x: number, y: number) => void;
-  deleteField: (id: string) => void;
-  toggleEnabled: (id: string) => void;
-  reset: () => void;
+  addStatic(): void;
+  addFromCol(col: string, label?: string): void;
+  updateField(upd: Partial<Field>): void;
+  moveField(id: string, x: number, y: number): void;
+  deleteField(id: string): void;
+  toggleEnabled(id: string): void;
+  duplicateField(id: string): void;
+  reset(): void;
+
+  // undo / redo
+  undo(): void;
+  redo(): void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
-const initialState = {
-  students: [],
-  columns: [],
-  templateFile: null,
-  templateUrl: "",
-  templateAspectRatio: null,
-  pageWidth_mm: null,
-  pageHeight_mm: null,
-  fields: [],
-  selectedFieldId: null,
-  fileNameColumn: null,
+const initialData = {
+  students: [] as Record<string, any>[],
+  columns: [] as string[],
+  templateFile: null as File | null,
+  templateUrl: "" as string,
+  templateAspect: null as string | null,
+  pageWidth_mm: null as number | null,
+  pageHeight_mm: null as number | null,
+  fields: [] as Field[],
+  selectedId: null as string | null,
+  fileNameCol: null as string | null,
+  zoom: 1 as number,
 };
 
-export const useCertificateStore = create<CertificateState>()(
+const useHistory = (): HistoryState => {
+  const past: CertificateState[] = [];
+  const future: CertificateState[] = [];
+
+  return {
+    past,
+    future,
+    push(s) {
+      this.past.push({ ...s });
+      this.future.length = 0;
+    },
+    undo() {
+      if (!this.past.length) return undefined;
+      const prev = this.past.pop()!;
+      this.future.push({ ...get() });
+      return prev;
+    },
+    redo() {
+      if (!this.future.length) return undefined;
+      const next = this.future.pop()!;
+      this.past.push({ ...get() });
+      return next;
+    },
+  };
+};
+
+let get: () => CertificateState; // will be set inside create
+
+export const useCertificateStore = create<CertificateState & { history: HistoryState }>()(
   devtools(
     persist(
-      (set, get) => ({
-        ...initialState,
+      (set, _get) => {
+        get = _get as any;
+        const history = useHistory();
 
-        setStudents: (v) => set({ students: v }),
-        setColumns: (v) => set({ columns: v }),
-        setTemplateFile: (f) => set({ templateFile: f }),
+        const push = () => {
+          const s = get();
+          const snap = {
+            students: s.students,
+            columns: s.columns,
+            templateFile: s.templateFile,
+            templateUrl: s.templateUrl,
+            templateAspect: s.templateAspect,
+            pageWidth_mm: s.pageWidth_mm,
+            pageHeight_mm: s.pageHeight_mm,
+            fields: s.fields.map(f => ({ ...f })),
+            selectedId: s.selectedId,
+            fileNameCol: s.fileNameCol,
+            zoom: s.zoom,
+          };
+          history.push(snap as any);
+        };
 
-        setTemplateUrl: (url, aspect, pageWidth_mm, pageHeight_mm) =>
-          set((state) => {
-            if (state.templateUrl) URL.revokeObjectURL(state.templateUrl);
-            return { templateUrl: url, templateAspectRatio: aspect || null, pageWidth_mm: pageWidth_mm ?? null, pageHeight_mm: pageHeight_mm ?? null };
-          }),
+        return {
+          ...initialData,
+          history,
 
-        setFileNameColumn: (col) => set({ fileNameColumn: col }),
+          // ---------- basic setters ----------
+          setStudents: v => set({ students: v }),
+          setColumns: v => set({ columns: v }),
 
-        setSelectedFieldId: (id) => set({ selectedFieldId: id }),
+          setTemplate: (f, url, w, h) =>
+            set(s => {
+              if (s.templateUrl) URL.revokeObjectURL(s.templateUrl);
+              return {
+                templateFile: f,
+                templateUrl: url ?? (f ? URL.createObjectURL(f) : ""),
+                templateAspect: w && h ? `${w}/${h}` : null,
+                pageWidth_mm: w ?? null,
+                pageHeight_mm: h ?? null,
+              };
+            }),
 
-        addStaticField: () =>
-          set((state) => {
-            const newField: Field = {
-              id: nanoid(),
-              label: "نص ثابت",
-              column: "",
-              value: "اسم المؤسسة",
-              x: 30,
-              y: 60,
-              fontSize: 18,
-              color: "#000000",
-              align: "center",
-              enabled: true,
-            };
-            return { fields: [...state.fields, newField] };
-          }),
+          setFileNameCol: c => set({ fileNameCol: c }),
+          setSelected: id => set({ selectedId: id }),
+          setZoom: z => set({ zoom: Math.max(0.2, Math.min(z, 3)) }),
 
-        addFieldFromColumn: (col, label) =>
-          set((state) => {
-            const newField: Field = {
-              id: nanoid(),
-              label: label ?? col,
-              column: col,
-              x: 30,
-              y: 40 + state.fields.length * 20,
-              fontSize: 14,
-              color: "#000000",
-              align: "center",
-              enabled: true,
-            };
-            return { fields: [...state.fields, newField] };
-          }),
+          // ---------- field actions ----------
+          addStatic: () =>
+            set(s => {
+              const nf: Field = {
+                id: nanoid(),
+                label: "نص ثابت",
+                value: "اسم المؤسسة",
+                x: 30,
+                y: 60,
+                fontSize: 18,
+                color: "#000000",
+                align: "center",
+              };
+              push();
+              return { fields: [...s.fields, nf] };
+            }),
 
-        updateField: (updates) =>
-          set((state) => {
-            if (!state.selectedFieldId) return state;
-            return {
-              fields: state.fields.map((f) =>
-                f.id === state.selectedFieldId ? { ...f, ...updates } : f
-              ),
-            };
-          }),
+          addFromCol: (col, label) =>
+            set(s => {
+              const nf: Field = {
+                id: nanoid(),
+                label: label ?? col,
+                column: col,
+                x: 30,
+                y: 40 + s.fields.length * 20,
+                fontSize: 14,
+                color: "#000000",
+                align: "center",
+              };
+              push();
+              return { fields: [...s.fields, nf] };
+            }),
 
-        updateFieldPosition: (id, x, y) =>
-          set((state) => ({
-            fields: state.fields.map((f) => (f.id === id ? { ...f, x, y } : f)),
-          })),
+          updateField: upd =>
+            set(s => {
+              if (!s.selectedId) return s;
+              push();
+              return {
+                fields: s.fields.map(f =>
+                  f.id === s.selectedId ? { ...f, ...upd } : f
+                ),
+              };
+            }),
 
-        deleteField: (id) =>
-          set((state) => ({
-            fields: state.fields.filter((f) => f.id !== id),
-            selectedFieldId: state.selectedFieldId === id ? null : state.selectedFieldId,
-          })),
+          moveField: (id, x, y) =>
+            set(s => ({
+              fields: s.fields.map(f => (f.id === id ? { ...f, x, y } : f)),
+            })),
 
-        toggleEnabled: (id) =>
-          set((state) => ({
-            fields: state.fields.map((f) =>
-              f.id === id ? { ...f, enabled: !(f.enabled ?? true) } : f
-            ),
-          })),
+          deleteField: id =>
+            set(s => {
+              push();
+              return {
+                fields: s.fields.filter(f => f.id !== id),
+                selectedId: s.selectedId === id ? null : s.selectedId,
+              };
+            }),
 
-        reset: () => {
-          const { templateUrl } = get();
-          if (templateUrl) URL.revokeObjectURL(templateUrl);
-          set(initialState);
-        },
-      }),
-      { name: "cert-gen", partialize: (s) => ({ columns: s.columns, fields: s.fields, fileNameColumn: s.fileNameColumn }) }
+          toggleEnabled: id =>
+            set(s => {
+              push();
+              return {
+                fields: s.fields.map(f =>
+                  f.id === id ? { ...f, enabled: !(f.enabled ?? true) } : f
+                ),
+              };
+            }),
+
+          duplicateField: id =>
+            set(s => {
+              const src = s.fields.find(f => f.id === id);
+              if (!src) return s;
+              const copy: Field = {
+                ...src,
+                id: nanoid(),
+                label: `${src.label} (نسخة)`,
+              };
+              push();
+              return { fields: [...s.fields, copy] };
+            }),
+
+          reset: () => {
+            const { templateUrl } = get();
+            if (templateUrl) URL.revokeObjectURL(templateUrl);
+            set(initialData);
+          },
+
+          // ---------- undo / redo ----------
+          undo: () => {
+            const prev = history.undo();
+            if (prev) set(prev);
+          },
+          redo: () => {
+            const next = history.redo();
+            if (next) set(next);
+          },
+          get canUndo() {
+            return history.past.length > 0;
+          },
+          get canRedo() {
+            return history.future.length > 0;
+          },
+        };
+      },
+      {
+        name: "cert-gen",
+        partialize: s => ({
+          columns: s.columns,
+          fields: s.fields,
+          fileNameCol: s.fileNameCol,
+          zoom: s.zoom,
+        }),
+      }
     ),
     { name: "CertStore" }
   )

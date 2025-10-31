@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -70,6 +71,9 @@ export function PreviewDialog({ open, onOpenChange }: PreviewDialogProps) {
               {currentIndex + 1} من {students.length}
             </Badge>
           </DialogTitle>
+          <DialogDescription className="sr-only">
+          معاينة الشهادة الحالية مع إمكانية التنقل بين السجلات
+         </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="preview" className="w-full">

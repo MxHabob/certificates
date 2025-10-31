@@ -22,7 +22,7 @@ interface ColumnPickerProps {
 }
 
 export function ColumnPicker({ open, onOpenChange, columns }: ColumnPickerProps) {
-  const { addFieldFromColumn } = useCertificateStore();
+  const { addFromCol } = useCertificateStore();
   const [selectedColumn, setSelectedColumn] = useState<string>("");
   const [customLabel, setCustomLabel] = useState<string>("");
 
@@ -33,7 +33,7 @@ export function ColumnPicker({ open, onOpenChange, columns }: ColumnPickerProps)
     }
 
     const label = customLabel.trim() || selectedColumn;
-    addFieldFromColumn(selectedColumn, label);
+    addFromCol(selectedColumn, label);
     toast.success(`تم إضافة حقل: ${label}`);
     onOpenChange(false);
     setSelectedColumn("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Settings2, Trash2, Type, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
+import { Plus, Settings2, Trash2, Type, AlignLeft, AlignCenter, AlignRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,26 +19,15 @@ interface FieldControlsProps {
 export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) {
   const {
     fields,
-    selectedFieldId,
-    addStaticField,
+    selectedId,
+    addStatic,
     updateField,
     deleteField,
-    setSelectedFieldId,
     toggleEnabled,
+    duplicateField,
   } = useCertificateStore();
 
-  const selectedField = fields.find((f) => f.id === selectedFieldId);
-
-  const handleAddStatic = () => {
-    addStaticField();
-    setSelectedFieldId(null);
-    toast.success("تم إضافة نص ثابت");
-  };
-
-  const handleAddFromColumn = () => {
-    setSelectedFieldId(null);
-    onAddFromColumn();
-  };
+  const sel = fields.find(f => f.id === selectedId);
 
   return (
     <div className="space-y-4">
@@ -50,12 +39,12 @@ export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) 
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <Button onClick={handleAddStatic} variant="outline" className="w-full justify-start gap-2">
+          <Button onClick={addStatic} variant="outline" className="w-full justify-start gap-2">
             <Type className="h-4 w-4" />
             نص ثابت
           </Button>
           <Button
-            onClick={handleAddFromColumn}
+            onClick={onAddFromColumn}
             disabled={!columns.length}
             variant="outline"
             className="w-full justify-start gap-2"
@@ -66,7 +55,7 @@ export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) 
         </CardContent>
       </Card>
 
-      {selectedField && (
+      {sel && (
         <Card className="border-primary/50">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -78,9 +67,9 @@ export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) 
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">تفعيل الحقل</Label>
               <Switch
-                checked={selectedField.enabled !== false}
+                checked={sel.enabled !== false}
                 onCheckedChange={(c) => {
-                  toggleEnabled(selectedField.id);
+                  toggleEnabled(sel.id);
                   toast.success(c ? "تم تفعيل الحقل" : "تم تعطيل الحقل");
                 }}
               />
@@ -89,28 +78,28 @@ export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) 
             <div className="space-y-2">
               <Label className="text-sm font-medium">اسم الحقل</Label>
               <Input
-                value={selectedField.label || ""}
+                value={sel.label || ""}
                 onChange={(e) => updateField({ label: e.target.value })}
                 placeholder="اسم الحقل"
-                disabled={selectedField.enabled === false}
+                disabled={sel.enabled === false}
               />
             </div>
             <Separator />
             <div className="space-y-2">
               <Label className="text-sm font-medium">المحتوى</Label>
-              {selectedField.column ? (
+              {sel.column ? (
                 <div className="space-y-2">
                   <Badge variant="secondary" className="w-full justify-center py-2">
-                    {selectedField.column}
+                    {sel.column}
                   </Badge>
                   <p className="text-xs text-center text-muted-foreground">البيانات من عمود Excel</p>
                 </div>
               ) : (
                 <Input
-                  value={selectedField.value || ""}
+                  value={sel.value || ""}
                   onChange={(e) => updateField({ value: e.target.value })}
                   placeholder="أدخل النص"
-                  disabled={selectedField.enabled === false}
+                  disabled={sel.enabled === false}
                 />
               )}
             </div>
@@ -122,14 +111,14 @@ export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) 
                   <Button
                     key={a}
                     variant={
-                      selectedField.align === a || (!selectedField.align && a === "center")
+                      sel.align === a || (!sel.align && a === "center")
                         ? "default"
                         : "outline"
                     }
                     size="sm"
                     className="flex-1"
                     onClick={() => updateField({ align: a })}
-                    disabled={selectedField.enabled === false}
+                    disabled={sel.enabled === false}
                   >
                     {a === "right" && <AlignRight className="h-4 w-4" />}
                     {a === "center" && <AlignCenter className="h-4 w-4" />}
@@ -146,19 +135,19 @@ export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) 
                   type="number"
                   min={8}
                   max={72}
-                  value={selectedField.fontSize}
+                  value={sel.fontSize}
                   onChange={(e) => updateField({ fontSize: +e.target.value })}
-                  disabled={selectedField.enabled === false}
+                  disabled={sel.enabled === false}
                 />
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-medium">اللون</Label>
                 <Input
                   type="color"
-                  value={selectedField.color}
+                  value={sel.color}
                   onChange={(e) => updateField({ color: e.target.value })}
                   className="h-10"
-                  disabled={selectedField.enabled === false}
+                  disabled={sel.enabled === false}
                 />
               </div>
             </div>
@@ -169,9 +158,9 @@ export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) 
                 <Input
                   type="number"
                   step={0.5}
-                  value={selectedField.x.toFixed(1)}
+                  value={sel.x.toFixed(1)}
                   onChange={(e) => updateField({ x: +e.target.value })}
-                  disabled={selectedField.enabled === false}
+                  disabled={sel.enabled === false}
                 />
               </div>
               <div className="space-y-2">
@@ -179,19 +168,30 @@ export function FieldControls({ columns, onAddFromColumn }: FieldControlsProps) 
                 <Input
                   type="number"
                   step={0.5}
-                  value={selectedField.y.toFixed(1)}
+                  value={sel.y.toFixed(1)}
                   onChange={(e) => updateField({ y: +e.target.value })}
-                  disabled={selectedField.enabled === false}
+                  disabled={sel.enabled === false}
                 />
               </div>
             </div>
             <Separator />
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                duplicateField(sel.id);
+                toast.success("تم حذف الحقل");
+              }}
+              className="w-full gap-2"
+            >
+              <Copy className="h-4 w-4" />
+              تكرار الحقل
+            </Button>
+            <Button
               variant="destructive"
               size="sm"
               onClick={() => {
-                deleteField(selectedField.id);
-                setSelectedFieldId(null);
+                deleteField(sel.id);
                 toast.success("تم حذف الحقل");
               }}
               className="w-full gap-2"

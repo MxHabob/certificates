@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export const MM_TO_PX = 3.779527559;
+export const MM_TO_PX = 3.779527559;   // 96 dpi
 export const MM_TO_PT = 2.83464567;
 
 export const mmToPx = (mm: number) => mm * MM_TO_PX;

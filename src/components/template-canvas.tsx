@@ -1,65 +1,84 @@
 "use client";
 
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { DraggableField } from "@/components/draggable-field";
+import { DraggableField } from "./draggable-field";
+import { FileQuestion, ZoomIn, ZoomOut } from "lucide-react";
 import { useCertificateStore } from "@/hooks/use-certificate-store";
-import { FileQuestion } from "lucide-react";
+import { Button } from "./ui/button";
 
 export function TemplateCanvas() {
-  const { templateUrl, templateAspectRatio, fields, updateFieldPosition, selectedFieldId, setSelectedFieldId } = useCertificateStore();
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
+  const {
+    templateUrl,
+    templateAspect,
+    fields,
+    moveField,
+    setSelected,
+    selectedId,
+    zoom,
+    setZoom,
+  } = useCertificateStore();
+
+  const canvas = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
-    const updateRect = () => {
-      if (canvasRef.current) {
-        setCanvasRect(canvasRef.current.getBoundingClientRect());
-      }
-    };
-    updateRect();
-    window.addEventListener("resize", updateRect);
-    return () => window.removeEventListener("resize", updateRect);
+    const update = () => canvas.current && setRect(canvas.current.getBoundingClientRect());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, []);
 
-  const handleCanvasClick = useCallback(
+  const click = useCallback(
     (e: React.MouseEvent) => {
-      if (e.target === canvasRef.current) {
-        setSelectedFieldId(null);
-      }
+      if (e.target === canvas.current) setSelected(null);
     },
-    [setSelectedFieldId]
+    [setSelected]
   );
 
   return (
     <Card className="overflow-hidden border-2 shadow-xl">
       <CardContent className="p-0">
+        <div className="flex items-center justify-between bg-muted/30 px-3 py-1">
+          <div className="flex gap-1">
+            <Button size="icon" variant="ghost" onClick={() => setZoom(zoom / 1.3)}>
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={() => setZoom(zoom * 1.3)}>
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <span className="px-2 text-sm">{Math.round(zoom * 100)}%</span>
+          </div>
+        </div>
+
         <div
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          className="relative bg-muted/30 cursor-default"
+          ref={canvas}
+          onClick={click}
+          className="relative bg-muted/30 overflow-hidden"
           style={{
-            aspectRatio: templateAspectRatio || "210 / 297",
+            aspectRatio: templateAspect ?? "210 / 297",
+            transform: `scale(${zoom})`,
+            transformOrigin: "top left",
           }}
         >
           {templateUrl ? (
             <>
               <img
                 src={templateUrl}
-                alt="Template"
-                className="absolute inset-0 h-full w-full object-contain pointer-events-none select-none"
+                alt="قالب"
+                className="absolute inset-0 h-full w-full object-contain select-none pointer-events-none"
                 draggable={false}
               />
               {fields
-                .filter((f) => f.enabled !== false)
-                .map((f) => (
+                .filter(f => f.enabled !== false)
+                .map(f => (
                   <DraggableField
                     key={f.id}
                     field={f}
-                    onMove={updateFieldPosition}
-                    onSelect={setSelectedFieldId}
-                    isSelected={f.id === selectedFieldId}
-                    canvasRect={canvasRect}
+                    onMove={moveField}
+                    onSelect={setSelected}
+                    isSelected={f.id === selectedId}
+                    canvasRect={rect}
                   />
                 ))}
             </>
