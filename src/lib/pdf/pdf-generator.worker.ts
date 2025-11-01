@@ -1,13 +1,21 @@
-import { expose } from "comlink";
-import { PDFDocument, PDFFont, rgb } from "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js";
-import fontkit from "https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js";
-import convertArabic from 'arabic-reshaper';
+// src/lib/pdf/pdf-generator.worker.ts
+/// <reference lib="webworker" />
 
-(PDFDocument as any).registerFontkit?.(fontkit);
+import { expose } from "comlink";
+import convertArabic from 'arabic-reshaper';
 
 const MM_TO_PT = 2.83464567;
 
-async function getFont(pdf: PDFDocument): Promise<PDFFont> {
+// دالة لتحميل pdf-lib و fontkit ديناميكيًا
+async function loadPdfLib() {
+  const [pdfLib, fontkit] = await Promise.all([
+    import("pdf-lib"),
+    import("@pdf-lib/fontkit"),
+  ]);
+  return { ...pdfLib, fontkit: fontkit.default };
+}
+
+async function getFont(pdf: any, fontkit: any): Promise<any> {
   const fontBytes = await fetch("/fonts/NotoSansArabic-Regular.ttf").then(r =>
     r.arrayBuffer()
   );
@@ -15,7 +23,7 @@ async function getFont(pdf: PDFDocument): Promise<PDFFont> {
   return await pdf.embedFont(fontBytes, { subset: true });
 }
 
-async function embedTemplate(pdf: PDFDocument, file: File) {
+async function embedTemplate(pdf: any, file: File) {
   const arrayBuffer = await file.arrayBuffer();
   const pngImage = await pdf.embedPng(arrayBuffer);
   const { width, height } = pngImage;
@@ -26,25 +34,24 @@ function drawField(
   page: any,
   text: string,
   f: any,
-  font: PDFFont,
+  font: any,
   pageH: number
 ) {
   if (!text) return;
 
   const reshapedText = convertArabic(text);
-
   const size = f.fontSize;
   const x = f.x * MM_TO_PT;
   const y = pageH - f.y * MM_TO_PT - size;
 
   const match = f.color.match(/#(..)(..)(..)/);
   const color = match
-    ? rgb(
+    ? page.doc.context.obj.rgb(
         parseInt(match[1], 16) / 255,
         parseInt(match[2], 16) / 255,
         parseInt(match[3], 16) / 255
       )
-    : rgb(0, 0, 0);
+    : page.doc.context.obj.rgb(0, 0, 0);
 
   let finalX = x;
   if (f.align === "center" || f.align === "right") {
@@ -68,11 +75,12 @@ const api = {
     templateFile: File | null,
     single = false
   ) {
-    const buffers: Uint8Array[] = [];
+    const { PDFDocument, fontkit } = await loadPdfLib();
 
-    let sharedPdf: PDFDocument | null = null;
-    let sharedFont: PDFFont | null = null;
-    let sharedTemplatePng: any | null = null;
+    const buffers: Uint8Array[] = [];
+    let sharedPdf: any = null;
+    let sharedFont: any = null;
+    let sharedTemplatePng: any = null;
     let pageSize: [number, number] | null = null;
 
     if (templateFile) {
@@ -88,7 +96,7 @@ const api = {
 
     if (single) {
       sharedPdf = await PDFDocument.create();
-      sharedFont = await getFont(sharedPdf);
+      sharedFont = await getFont(sharedPdf, fontkit);
       if (templateFile) {
         const { pngImage } = await embedTemplate(sharedPdf, templateFile);
         sharedTemplatePng = pngImage;
@@ -96,10 +104,10 @@ const api = {
     }
 
     for (let i = 0; i < students.length; i++) {
-      let currentPdf: PDFDocument;
+      let currentPdf: any;
       let page: any;
-      let font: PDFFont;
-      let templatePng: any | null = null;
+      let font: any;
+      let templatePng: any = null;
 
       if (single) {
         currentPdf = sharedPdf!;
@@ -108,7 +116,7 @@ const api = {
         page = currentPdf.addPage(pageSize);
       } else {
         currentPdf = await PDFDocument.create();
-        font = await getFont(currentPdf);
+        font = await getFont(currentPdf, fontkit);
         if (templateFile) {
           const { pngImage } = await embedTemplate(currentPdf, templateFile);
           templatePng = pngImage;
@@ -116,18 +124,11 @@ const api = {
         page = currentPdf.addPage(pageSize);
       }
 
-      // رسم القالب (إذا وجد)
       if (templatePng) {
         const { width, height } = page.getSize();
-        page.drawImage(templatePng, {
-          x: 0,
-          y: 0,
-          width,
-          height,
-        });
+        page.drawImage(templatePng, { x: 0, y: 0, width, height });
       }
 
-      // رسم الحقول
       const student = students[i];
       for (const f of fields) {
         if (f.enabled === false) continue;
@@ -141,8 +142,10 @@ const api = {
         buffers.push(await currentPdf.save());
       }
 
+      // إرسال التقدم
       self.postMessage({ type: "progress", done: i + 1, total: students.length });
 
+      // تجنب تجميد الـ UI
       if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));
     }
 
