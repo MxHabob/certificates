@@ -5,7 +5,7 @@ import {
   rgb,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import convertArabic from 'arabic-reshaper';
+import * as ArabicReshaper from 'arabic-reshaper';
 
 const MM_TO_PT = 2.83464567;
 
@@ -33,7 +33,7 @@ function drawField(
 ) {
   if (!text) return;
 
-  const reshapedText = convertArabic(text);
+  const reshapedText = ArabicReshaper.convertArabic(text); 
 
   const size = f.fontSize;
   const x = f.x * MM_TO_PT;

@@ -14,7 +14,7 @@ export default defineConfig({
     minify: "terser",
     terserOptions: {
       mangle: {
-        reserved: ["worker"], // This prevents 'worker' from being renamed to 'WE'
+        reserved: ["worker"],
       },
     },
   },
