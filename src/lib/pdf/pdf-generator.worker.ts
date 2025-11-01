@@ -1,9 +1,14 @@
 // src/lib/pdf/pdf-generator.worker.ts
 /// <reference lib="webworker" />
-
 import { expose } from "comlink";
-import convertArabic from "arabic-reshaper";
 
+let arabicReshaper: any;
+async function loadArabicReshaper() {
+  if (!arabicReshaper) {
+    arabicReshaper = await import("arabic-reshaper");
+  }
+  return arabicReshaper;
+}
 const MM_TO_PT = 2.83464567;
 
 async function loadPdfLib() {
@@ -33,9 +38,10 @@ async function embedTemplate(pdf: any, file: File) {
   return { pngImage, size: { w: width, h: height } };
 }
 
-function drawField(page: any, text: string, f: any, font: any, pageH: number) {
+async function drawField(page: any, text: string, f: any, font: any, pageH: number) {
   if (!text) return;
-  const reshapedText = convertArabic(text);
+  const reshaper = await loadArabicReshaper();
+  const reshapedText = reshaper.convertArabic(text);
   const size = f.fontSize;
   const x = f.x * MM_TO_PT;
   const y = pageH - f.y * MM_TO_PT - size;
