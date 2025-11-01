@@ -15,21 +15,29 @@ export default defineConfig({
 
   build: {
     target: "es2020",
-    rollupOptions: {
-      output: {
-        // Ensure workers are bundled correctly
-        manualChunks: undefined,
+    minify: "terser",
+    terserOptions: {
+      mangle: {
+        // Prevent mangling of certain function names
+        reserved: ['expose', 'wrap', 'generateAll', 'drawField']
+      },
+      compress: {
+        drop_console: true, // Remove console logs for production
       },
     },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split vendor chunks for better caching
+          pdf: ['pdf-lib', '@pdf-lib/fontkit'],
+          utils: ['jszip', 'file-saver', 'comlink'],
+          arabic: ['arabic-reshaper']
+        }
+      }
+    }
   },
 
   worker: {
-    format: "es", // Use ES module format for workers
-    rollupOptions: {
-      output: {
-        // Ensure worker chunks are properly formatted
-        format: "es",
-      },
-    },
+    format: "es",
   },
 });
