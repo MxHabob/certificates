@@ -6,33 +6,23 @@ import {
   rgb,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
+import convertArabic from 'arabic-reshaper';
 
 const MM_TO_PT = 2.83464567;
 
-let cachedFont: PDFFont | null = null;
-let cachedTemplatePng: any | null = null; // embedded PNG
-let cachedTemplateSize: { w: number; h: number } | null = null;
-
 async function getFont(pdf: PDFDocument): Promise<PDFFont> {
-  if (cachedFont) return cachedFont;
   const fontBytes = await fetch("/fonts/NotoSansArabic-Regular.ttf").then(r =>
     r.arrayBuffer()
   );
   pdf.registerFontkit(fontkit);
-  cachedFont = await pdf.embedFont(fontBytes, { subset: true });
-  return cachedFont;
+  return await pdf.embedFont(fontBytes, { subset: true });
 }
 
 async function embedTemplate(pdf: PDFDocument, file: File) {
-  if (cachedTemplatePng) return cachedTemplatePng;
-
   const arrayBuffer = await file.arrayBuffer();
   const pngImage = await pdf.embedPng(arrayBuffer);
   const { width, height } = pngImage;
-
-  cachedTemplatePng = pngImage;
-  cachedTemplateSize = { w: width, h: height };
-  return pngImage;
+  return { pngImage, size: { w: width, h: height } };
 }
 
 function drawField(
@@ -42,9 +32,13 @@ function drawField(
   font: PDFFont,
   pageH: number
 ) {
+  if (!text) return;
+
+  const reshapedText = convertArabic(text);
+
   const size = f.fontSize;
   const x = f.x * MM_TO_PT;
-  const y = pageH - f.y * MM_TO_PT - size * 0.35;
+  const y = pageH - f.y * MM_TO_PT - size;
 
   const match = f.color.match(/#(..)(..)(..)/);
   const color = match
@@ -57,11 +51,11 @@ function drawField(
 
   let finalX = x;
   if (f.align === "center" || f.align === "right") {
-    const w = font.widthOfTextAtSize(text, size);
+    const w = font.widthOfTextAtSize(reshapedText, size);
     finalX = f.align === "center" ? x - w / 2 : x - w;
   }
 
-  page.drawText(text, {
+  page.drawText(reshapedText, {
     x: finalX,
     y,
     size,
@@ -75,37 +69,57 @@ const api = {
     students: Record<string, any>[],
     fields: any[],
     templateFile: File | null,
-    singlePdf: boolean
+    single = false
   ) {
-    const pdf = await PDFDocument.create();
-    const font = await getFont(pdf);
-
-    let pageSize: [number, number] = [210, 297];
-    let templatePng: any = null;
-
-    if (templateFile) {
-      templatePng = await embedTemplate(pdf, templateFile);
-      const isLandscape = cachedTemplateSize!.w > cachedTemplateSize!.h;
-      pageSize = isLandscape ? [297, 210] : [210, 297];
-    }
-
     const buffers: Uint8Array[] = [];
 
+    let sharedPdf: PDFDocument | null = null;
+    let sharedFont: PDFFont | null = null;
+    let sharedTemplatePng: any | null = null;
+    let pageSize: [number, number] | null = null;
+
+    if (templateFile) {
+      const tempPdf = await PDFDocument.create();
+      const { size: templateSize } = await embedTemplate(tempPdf, templateFile);
+      const isLandscape = templateSize.w > templateSize.h;
+      const widthPt = (isLandscape ? 297 : 210) * MM_TO_PT;
+      const heightPt = (isLandscape ? 210 : 297) * MM_TO_PT;
+      pageSize = [widthPt, heightPt];
+    } else {
+      pageSize = [210 * MM_TO_PT, 297 * MM_TO_PT];
+    }
+
+    if (single) {
+      sharedPdf = await PDFDocument.create();
+      sharedFont = await getFont(sharedPdf);
+      if (templateFile) {
+        const { pngImage } = await embedTemplate(sharedPdf, templateFile);
+        sharedTemplatePng = pngImage;
+      }
+    }
+
     for (let i = 0; i < students.length; i++) {
-      // Always create a fresh page in the same doc for singlePdf
-      // For ZIP: create a new doc per certificate
       let currentPdf: PDFDocument;
       let page: any;
+      let font: PDFFont;
+      let templatePng: any | null = null;
 
-      if (singlePdf) {
-        currentPdf = pdf;
-        page = pdf.addPage(pageSize);
+      if (single) {
+        currentPdf = sharedPdf!;
+        font = sharedFont!;
+        templatePng = sharedTemplatePng;
+        page = currentPdf.addPage(pageSize);
       } else {
         currentPdf = await PDFDocument.create();
+        font = await getFont(currentPdf);
+        if (templateFile) {
+          const { pngImage } = await embedTemplate(currentPdf, templateFile);
+          templatePng = pngImage;
+        }
         page = currentPdf.addPage(pageSize);
       }
 
-      // Draw template background (if any)
+      // رسم القالب (إذا وجد)
       if (templatePng) {
         const { width, height } = page.getSize();
         page.drawImage(templatePng, {
@@ -116,24 +130,27 @@ const api = {
         });
       }
 
-      // Draw fields
+      // رسم الحقول
       const student = students[i];
       for (const f of fields) {
         if (f.enabled === false) continue;
         const txt = f.column
           ? String(student[f.column] ?? "").trim()
           : f.value ?? "";
-        if (txt) drawField(page, txt, f, font, page.getHeight());
+        drawField(page, txt, f, font, page.getHeight());
       }
 
-      // Save
-      const bytes = singlePdf ? await pdf.save() : await currentPdf.save();
-      buffers.push(bytes);
+      if (!single) {
+        buffers.push(await currentPdf.save());
+      }
 
-      // Progress
       self.postMessage({ type: "progress", done: i + 1, total: students.length });
 
       if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));
+    }
+
+    if (single && sharedPdf) {
+      buffers.push(await sharedPdf.save());
     }
 
     return { buffers, total: students.length };

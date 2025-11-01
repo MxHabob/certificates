@@ -45,7 +45,7 @@ export async function generateCertificates(
     );
 
     if (singlePdf) {
-      const blob = new Blob([buffers[0]], { type: "application/pdf" });
+      const blob = new Blob([buffers[0] as Uint8Array<ArrayBuffer>], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
