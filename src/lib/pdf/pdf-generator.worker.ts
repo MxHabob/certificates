@@ -2,25 +2,28 @@
 /// <reference lib="webworker" />
 
 import { expose } from "comlink";
-import convertArabic from 'arabic-reshaper';
+import convertArabic from "arabic-reshaper";
 
 const MM_TO_PT = 2.83464567;
 
-// دالة لتحميل pdf-lib و fontkit ديناميكيًا
 async function loadPdfLib() {
-  const [pdfLib, fontkit] = await Promise.all([
+  const [pdfLib, fontkitLib] = await Promise.all([
     import("pdf-lib"),
     import("@pdf-lib/fontkit"),
   ]);
-  return { ...pdfLib, fontkit: fontkit.default };
+  return {
+    PDFDocument: pdfLib.PDFDocument,
+    rgb: pdfLib.rgb,
+    fontkit: fontkitLib.default,
+  };
 }
 
-async function getFont(pdf: any, fontkit: any): Promise<any> {
+async function getFont(pdf: any, fontkit: any) {
   const fontBytes = await fetch("/fonts/NotoSansArabic-Regular.ttf").then(r =>
     r.arrayBuffer()
   );
   pdf.registerFontkit(fontkit);
-  return await pdf.embedFont(fontBytes, { subset: true });
+  return pdf.embedFont(fontBytes, { subset: true });
 }
 
 async function embedTemplate(pdf: any, file: File) {
@@ -30,15 +33,8 @@ async function embedTemplate(pdf: any, file: File) {
   return { pngImage, size: { w: width, h: height } };
 }
 
-function drawField(
-  page: any,
-  text: string,
-  f: any,
-  font: any,
-  pageH: number
-) {
+function drawField(page: any, text: string, f: any, font: any, pageH: number) {
   if (!text) return;
-
   const reshapedText = convertArabic(text);
   const size = f.fontSize;
   const x = f.x * MM_TO_PT;
@@ -110,8 +106,8 @@ const api = {
       let templatePng: any = null;
 
       if (single) {
-        currentPdf = sharedPdf!;
-        font = sharedFont!;
+        currentPdf = sharedPdf;
+        font = sharedFont;
         templatePng = sharedTemplatePng;
         page = currentPdf.addPage(pageSize);
       } else {
@@ -142,10 +138,8 @@ const api = {
         buffers.push(await currentPdf.save());
       }
 
-      // إرسال التقدم
       self.postMessage({ type: "progress", done: i + 1, total: students.length });
 
-      // تجنب تجميد الـ UI
       if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));
     }
 
