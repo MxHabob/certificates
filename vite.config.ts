@@ -14,20 +14,14 @@ export default defineConfig({
   },
 
   build: {
-    minify: "terser",
-    terserOptions: {
-      mangle: {
-        reserved: ["WE", "OP", "ID", "LE", "GE", "EQ", "NE", "LT", "GT"],
-        keep_fnames: true,
-      },
-      keep_fnames: true,
-    } as import("terser").MinifyOptions,
-
+    minify: "esbuild",
     target: "es2020",
+
     rollupOptions: {
       output: {
         manualChunks: {
           "pdf-lib": ["pdf-lib"],
+          "pdf-worker": ["./src/lib/pdf/pdf-generator.worker.ts"], // Optional: isolate worker
         },
       },
     },
