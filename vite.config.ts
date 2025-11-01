@@ -15,27 +15,30 @@ export default defineConfig({
 
   build: {
     target: "es2020",
-    minify: "esbuild",
-    sourcemap: false, // Disable source maps for production
+    minify: "terser",
+    terserOptions: {
+      mangle: false, // Completely disable function name mangling
+      compress: {
+        drop_console: true, // Remove console logs
+        drop_debugger: true, // Remove debugger statements
+        pure_funcs: ['console.log', 'console.debug'], // Remove specific functions
+      },
+      format: {
+        comments: false, // Remove comments
+      },
+      keep_classnames: true,
+      keep_fnames: true,
+    },
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          // More specific chunking strategy
-          if (id.includes('pdf-lib') || id.includes('fontkit')) {
-            return 'pdf';
-          }
-          if (id.includes('jszip') || id.includes('file-saver')) {
-            return 'zip';
-          }
-          if (id.includes('comlink')) {
-            return 'worker';
-          }
-          if (id.includes('arabic-reshaper')) {
-            return 'text';
-          }
-          if (id.includes('node_modules')) {
-            return 'vendor';
-          }
+        manualChunks: {
+          // Better chunk splitting for caching
+          pdf: ['pdf-lib', '@pdf-lib/fontkit'],
+          compression: ['jszip', 'file-saver'],
+          worker: ['comlink'],
+          text: ['arabic-reshaper'],
+          ui: ['react', 'react-dom'],
+          utils: ['sonner', 'zustand'],
         }
       }
     }
@@ -45,19 +48,9 @@ export default defineConfig({
     format: "es",
     rollupOptions: {
       output: {
-        // Specific configuration for worker output
-        format: 'es',
-        manualChunks: undefined, // No chunking in workers
+        // Ensure worker chunks also don't get mangled
+        format: 'es'
       }
     }
   },
-
-  optimizeDeps: {
-    include: [
-      'pdf-lib',
-      '@pdf-lib/fontkit',
-      'arabic-reshaper',
-      'comlink'
-    ]
-  }
 });
