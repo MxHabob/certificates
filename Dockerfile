@@ -18,4 +18,4 @@ RUN npm install -g serve
 
 EXPOSE 5413
 
-CMD ["serve", "-s", "dist", "-l", "0.0.0.0:5413"]
+CMD ["serve","-s","dist","-l","tcp://0.0.0.0:5413"]
