@@ -18,20 +18,43 @@ export default defineConfig({
     minify: "terser",
     terserOptions: {
       mangle: {
-        // Prevent mangling of certain function names
-        reserved: ['expose', 'wrap', 'generateAll', 'drawField']
+        reserved: [
+          // Preserve PDF-lib class names
+          'PDFDocument', 'PDFPage', 'PDFFont', 'PDFImage',
+          'PDFForm', 'PDFTextField', 'PDFDropdown', 'PDFOptionList',
+          'PDFButton', 'PDFCheckBox', 'PDFRadioGroup', 'PDFSignature',
+          'PDFEmbeddedPage', 'PDFEmbeddedFile', 'PDFJavaScript',
+          'PDFObject', 'PDFRef', 'PDFStream', 'PDFArray', 'PDFDict',
+          'PDFName', 'PDFNumber', 'PDFHexString', 'PDFString',
+          'PDFNull', 'PDFBool', 'PDFOperator', 'PDFRawStream',
+          'PDFContentStream', 'PDFHeader', 'PDFTrailer', 'PDFXRef',
+          'PDFWriter', 'PDFReader', 'PDFObjectParser', 'PDFObjectCopier',
+          'PDFObjectStreamParser', 'PDFObjectStream', 'PDFPageEmbedder',
+          'PDFWidgetAnnotation', 'PDFAcroForm', 'PDFAcroTextField',
+          'PDFAcroComboBox', 'PDFAcroListBox', 'PDFAcroCheckBox',
+          'PDFAcroRadioButton', 'PDFAcroPushButton', 'PDFAcroSignature',
+          'PDFDocumentFactory', 'PDFDocumentWriter', 'StandardFonts',
+          'RGB', 'CMYK', 'Grayscale', 'HSB', 'Lab', 'ColorSpace',
+          'PDFInvalidObject', 'PDFContext',
+          // Comlink functions
+          'expose', 'wrap', 'transfer', 'proxy',
+          // Our functions
+          'generateAll', 'drawField', 'loadPdfLib', 'getFont', 'embedTemplate'
+        ],
+        keep_classnames: true, // Preserve class names
+        keep_fnames: true,     // Preserve function names
       },
       compress: {
-        drop_console: true, // Remove console logs for production
+        drop_console: true,
+        keep_classnames: true, // Also preserve in compression
+        keep_fnames: true,
       },
     },
     rollupOptions: {
       output: {
         manualChunks: {
-          // Split vendor chunks for better caching
           pdf: ['pdf-lib', '@pdf-lib/fontkit'],
-          utils: ['jszip', 'file-saver', 'comlink'],
-          arabic: ['arabic-reshaper']
+          utils: ['jszip', 'file-saver', 'comlink', 'arabic-reshaper']
         }
       }
     }
