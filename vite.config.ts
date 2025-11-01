@@ -17,8 +17,10 @@ export default defineConfig({
     minify: "terser",
     terserOptions: {
       mangle: {
-        reserved: ["WE"],
+        reserved: ["WE", "OP", "ID", "LE", "GE", "EQ", "NE", "LT", "GT"],
+        keep_fnames: true,
       },
+      keep_fnames: true,
     } as import("terser").MinifyOptions,
 
     target: "es2020",
