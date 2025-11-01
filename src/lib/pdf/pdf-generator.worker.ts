@@ -1,12 +1,9 @@
-// src/lib/pdf/pdf-generator.worker.ts
 import { expose } from "comlink";
-import {
-  PDFDocument,
-  PDFFont,
-  rgb,
-} from "pdf-lib";
-import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, PDFFont, rgb } from "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js";
+import fontkit from "https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js";
 import convertArabic from 'arabic-reshaper';
+
+(PDFDocument as any).registerFontkit?.(fontkit);
 
 const MM_TO_PT = 2.83464567;
 

@@ -16,11 +16,20 @@ export default defineConfig({
   build: {
     target: "es2020",
     rollupOptions: {
+      external: [
+        "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js",
+        "https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js",
+      ],
       output: {
         manualChunks: {
           "pdf-worker": ["./src/lib/pdf/pdf-generator.worker.ts"],
         },
+        format: "es",
       },
     },
+  },
+
+  worker: {
+    format: "es",
   },
 });
