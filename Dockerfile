@@ -1,5 +1,5 @@
 # اختياري: استخدام نسخة Node أخف
-FROM node:18-alpine AS builder
+FROM node:jod-alpine3.21 AS builder
 WORKDIR /app
 
 COPY package*.json ./
@@ -9,7 +9,7 @@ COPY . .
 
 RUN npm run build
 
-FROM node:18-alpine
+FROM node:jod-alpine3.21
 WORKDIR /app
 
 COPY --from=builder /app/dist ./dist
