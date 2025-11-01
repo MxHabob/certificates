@@ -110,7 +110,7 @@ export function Certificates() {
             </div>
             <div>
               <h1 className="text-2xl font-bold">مولد الشهادات</h1>
-              <p className="text-sm text-muted-foreground">إنشاء شهادات احترافية</p>
+              <p className="text-sm text-muted-foreground">Wonder Woman</p>
             </div>
           </div>
 
