@@ -2,6 +2,7 @@ import { wrap } from "comlink";
 import { toast } from "sonner";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { ERROR_MESSAGES } from "../constants";
 
 const worker = new Worker(
   new URL("./pdf-generator.worker.ts", import.meta.url),
@@ -13,8 +14,8 @@ const api = wrap<{
     students: Record<string, any>[],
     fields: any[],
     templateFile: File | null,
-    fileNameCol: string | null,
-    singlePdf: boolean
+    singlePdf: boolean,
+    options?: { pageWidth_mm?: number | null; pageHeight_mm?: number | null }
   ): Promise<{ buffers: Uint8Array[]; total: number }>;
 }>(worker);
 
@@ -23,8 +24,15 @@ export async function generateCertificates(
   fields: any[],
   templateFile: File | null,
   fileNameCol: string | null,
-  singlePdf = false
+  singlePdf = false,
+  pageWidth_mm?: number | null,
+  pageHeight_mm?: number | null
 ) {
+  if (!students.length) {
+    toast.error(ERROR_MESSAGES.NO_DATA);
+    return;
+  }
+
   const toastId = toast.loading(`0 / ${students.length} شهادة…`);
 
   // progress listener
@@ -40,8 +48,8 @@ export async function generateCertificates(
       students,
       fields,
       templateFile,
-      fileNameCol,
-      singlePdf
+      singlePdf,
+      { pageWidth_mm, pageHeight_mm }
     );
 
     if (singlePdf) {
@@ -72,7 +80,7 @@ export async function generateCertificates(
 
     toast.success(`تم إنشاء ${total} شهادة`, { id: toastId });
   } catch (err: any) {
-    toast.error(err.message || "فشل الإنشاء", { id: toastId });
+    toast.error(err.message || ERROR_MESSAGES.GENERATION_ERROR, { id: toastId });
   } finally {
     worker.removeEventListener("message", onProgress);
   }

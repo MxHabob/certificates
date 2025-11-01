@@ -6,7 +6,6 @@ import {
   FileSpreadsheet,
   FileImage,
   Sparkles,
-  Loader2,
   Download,
   FileText,
   Undo2,
@@ -18,6 +17,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Spinner } from "@/components/ui/spinner";
 import { TemplateCanvas } from "./template-canvas";
 import { FieldControls } from "./field-controls";
 import { ColumnPicker } from "./column-picker";
@@ -27,6 +28,7 @@ import { useCertificateStore } from "@/hooks/use-certificate-store";
 import { parseExcel } from "@/lib/excel-parser";
 import { generateCertificates } from "@/lib/pdf/pdf-worker";
 import { ModeToggle } from "./mode-toggle";
+import { ERROR_MESSAGES, ACCEPTED_IMAGE_TYPES } from "@/lib/constants";
 
 export function Certificates() {
   const {
@@ -49,7 +51,6 @@ export function Certificates() {
   const [showPreview, setShowPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  // ---------- Excel ----------
   const onExcel = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const f = e.target.files?.[0];
@@ -71,15 +72,18 @@ export function Certificates() {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const f = e.target.files?.[0];
       if (!f) return;
-      if (!f.type.includes("image/png")) {
-        toast.error("يرجى رفع PNG فقط");
+      if (!ACCEPTED_IMAGE_TYPES.includes(f.type)) {
+        toast.error(ERROR_MESSAGES.INVALID_PNG);
         return;
       }
       const url = URL.createObjectURL(f);
       const img = new Image();
       img.onload = () => {
-        const isL = img.naturalWidth > img.naturalHeight;
-        setTemplate(f, url, isL ? 297 : 210, isL ? 210 : 297);
+        const PIXELS_PER_MM = 300 / 25.4;
+        const width_mm = img.naturalWidth / PIXELS_PER_MM;
+        const height_mm = img.naturalHeight / PIXELS_PER_MM;
+        
+        setTemplate(f, url, width_mm, height_mm);
         toast.success("تم رفع القالب");
       };
       img.src = url;
@@ -89,17 +93,39 @@ export function Certificates() {
 
   // ---------- Generation ----------
   const startGenerate = async (single = false) => {
-    if (!students.length || !templateFile || !fields.length) {
-      toast.error("أكمل جميع الخطوات");
+    if (!students.length) {
+      toast.error(ERROR_MESSAGES.NO_DATA);
+      return;
+    }
+    if (!templateFile) {
+      toast.error(ERROR_MESSAGES.NO_TEMPLATE);
+      return;
+    }
+    if (!fields.length) {
+      toast.error(ERROR_MESSAGES.NO_FIELDS);
       return;
     }
     setGenerating(true);
-    await generateCertificates(students, fields, templateFile, fileNameCol, single);
-    setGenerating(false);
+    try {
+      await generateCertificates(
+        students,
+        fields,
+        templateFile,
+        fileNameCol,
+        single,
+        useCertificateStore.getState().pageWidth_mm,
+        useCertificateStore.getState().pageHeight_mm
+      );
+    } catch (error) {
+      toast.error(ERROR_MESSAGES.GENERATION_ERROR);
+      console.error(error);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted/20" dir="rtl">
+    <div className="min-h-screen" dir="rtl">
       <KeyboardHandler />
       <header className="border-b bg-background/95 backdrop-blur">
         <div className="container mx-auto flex items-center justify-between px-4 py-5">
@@ -115,58 +141,91 @@ export function Certificates() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={undo} disabled={!canUndo}>
-              <Undo2 className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={redo} disabled={!canRedo}>
-              <Redo2 className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" onClick={undo} disabled={!canUndo}>
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>تراجع</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" onClick={redo} disabled={!canRedo}>
+                  <Redo2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>إعادة</p>
+              </TooltipContent>
+            </Tooltip>
 
             {students.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPreview(true)}
-                disabled={!templateFile || fields.length === 0}
-              >
-                معاينة
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPreview(true)}
+                    disabled={!templateFile || fields.length === 0}
+                  >
+                    معاينة
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>معاينة الشهادات قبل التصدير</p>
+                </TooltipContent>
+              </Tooltip>
             )}
 
-            <Button
-              onClick={() => startGenerate(false)}
-              disabled={generating || !students.length || !templateFile || fields.length === 0}
-              className="gap-2"
-            >
-              {generating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  جاري…
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4" />
-                  {students.length} شهادة (ZIP)
-                </>
-              )}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => startGenerate(false)}
+                  disabled={generating || !students.length || !templateFile || fields.length === 0}
+                  className="gap-2"
+                >
+                  {generating ? (
+                    <>
+                      <Spinner className="h-4 w-4" />
+                      جاري…
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      {students.length} شهادة (ZIP)
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>تصدير جميع الشهادات كملفات PDF منفصلة في ملف ZIP</p>
+              </TooltipContent>
+            </Tooltip>
 
-            <Button
-              variant="secondary"
-              onClick={() => startGenerate(true)}
-              disabled={generating || !students.length || !templateFile || fields.length === 0}
-            >
-              <FileText className="h-4 w-4 mr-1" />
-              PDF واحد
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  onClick={() => startGenerate(true)}
+                  disabled={generating || !students.length || !templateFile || fields.length === 0}
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  PDF واحد
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>تصدير جميع الشهادات في ملف PDF واحد</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </header>
 
-      {/* ---------- Uploads ---------- */}
       <section className="container mx-auto px-4 py-8">
         <div className="grid gap-6 md:grid-cols-2 mb-8">
-          {/* Excel */}
           <Card className="overflow-hidden border-2 border-dashed transition-all hover:border-primary/50">
             <CardContent className="p-6">
               <div className="mb-4 flex items-center gap-3">
@@ -193,7 +252,6 @@ export function Certificates() {
             </CardContent>
           </Card>
 
-          {/* Template */}
           <Card className="overflow-hidden border-2 border-dashed transition-all hover:border-primary/50">
             <CardContent className="p-6">
               <div className="mb-4 flex items-center gap-3">
@@ -216,7 +274,6 @@ export function Certificates() {
           </Card>
         </div>
 
-        {/* ---------- File-name column picker ---------- */}
         {columns.length > 0 && (
           <Card className="mb-6">
             <CardContent className="p-4">
@@ -244,18 +301,14 @@ export function Certificates() {
           </Card>
         )}
 
-        {/* ---------- Canvas + Controls ---------- */}
-        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          <aside className="space-y-6">
-            <FieldControls columns={columns} onAddFromColumn={() => setShowExcel(true)} />
-          </aside>
-
-          <section>
+        <div className="space-y-4">
+          <FieldControls columns={columns} onAddFromColumn={() => setShowExcel(true)} />
+          <div className="space-y-4">
             <TemplateCanvas />
-          </section>
+          </div>
         </div>
       </section>
-
+      
       <ColumnPicker open={showExcel} onOpenChange={setShowExcel} columns={columns} />
       <PreviewDialog open={showPreview} onOpenChange={setShowPreview} />
     </div>

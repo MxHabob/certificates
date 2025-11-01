@@ -9,4 +9,12 @@ export interface Field {
   color: string;        // #rrggbb
   align?: "left" | "center" | "right";
   enabled?: boolean;
+  // New enhanced controls
+  fontWeight?: "normal" | "bold";
+  fontStyle?: "normal" | "italic";
+  underline?: boolean;
+  rotation?: number;     // degrees, 0-360
+  opacity?: number;     // 0-1
+  letterSpacing?: number; // pt
+  lineHeight?: number;   // multiplier (e.g., 1.2)
 }

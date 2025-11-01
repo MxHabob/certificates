@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Table2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, EyeIcon, Table2 } from "lucide-react";
 import { useCertificateStore } from "@/hooks/use-certificate-store";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -63,7 +63,7 @@ export function PreviewDialog({ open, onOpenChange }: PreviewDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] p-0" dir="rtl">
+      <DialogContent className="w-full max-w-6xl max-h-[90vh] p-0 flex flex-col" dir="rtl">
         <DialogHeader className="p-6 pb-4">
           <DialogTitle className="flex items-center justify-between">
             <span>معاينة الشهادة</span>
@@ -78,15 +78,17 @@ export function PreviewDialog({ open, onOpenChange }: PreviewDialogProps) {
 
         <Tabs defaultValue="preview" className="w-full">
           <TabsList className="grid w-full grid-cols-2 rounded-none border-b">
-            <TabsTrigger value="preview">معاينة الشهادة</TabsTrigger>
+            <TabsTrigger value="preview">
+              <EyeIcon className="h-4 w-4 mr-2" />
+              معاينة الشهادة
+            </TabsTrigger>
             <TabsTrigger value="data">
-              <Table2 className="h-4 w-4 ml-2" />
-              بيانات الطلاب
+              <Table2 className="h-4 w-4 mr-2" />  
+              البيانات
             </TabsTrigger>
           </TabsList>
 
-          {/* === Preview Tab === */}
-          <TabsContent value="preview" className="p-6 pt-4 space-y-4">
+          <TabsContent value="preview" className="p-6 pt-4 space-y-4 w-full">
             <div
               ref={previewRef}
               className="relative bg-muted/30 rounded-lg overflow-hidden w-full h-[60vh]"
@@ -153,9 +155,8 @@ export function PreviewDialog({ open, onOpenChange }: PreviewDialogProps) {
             </div>
           </TabsContent>
 
-          {/* === Data Table Tab === */}
           <TabsContent value="data" className="p-0">
-            <ScrollArea className="h-[500px] rounded-b-lg">
+            <ScrollArea className="h-[70vh] rounded-b-lg">
               <div className="p-4">
                 <div className="mb-4">
                   <h3 className="text-sm font-medium mb-2">الأعمدة المتاحة</h3>

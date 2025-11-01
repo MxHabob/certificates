@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 import type { Field } from "@/types/certificate";
+import { DEFAULT_FONT_SIZE, DEFAULT_FIELD_COLOR, MIN_ZOOM, MAX_ZOOM } from "@/lib/constants";
 
 interface HistoryState {
   past: CertificateState[];
@@ -138,7 +139,7 @@ export const useCertificateStore = create<CertificateState & { history: HistoryS
 
           setFileNameCol: c => set({ fileNameCol: c }),
           setSelected: id => set({ selectedId: id }),
-          setZoom: z => set({ zoom: Math.max(0.2, Math.min(z, 3)) }),
+          setZoom: z => set({ zoom: Math.max(MIN_ZOOM, Math.min(z, MAX_ZOOM)) }),
 
           // ---------- field actions ----------
           addStatic: () =>
@@ -149,8 +150,8 @@ export const useCertificateStore = create<CertificateState & { history: HistoryS
                 value: "اسم المؤسسة",
                 x: 30,
                 y: 60,
-                fontSize: 18,
-                color: "#000000",
+                fontSize: DEFAULT_FONT_SIZE + 4,
+                color: DEFAULT_FIELD_COLOR,
                 align: "center",
               };
               push();
@@ -165,8 +166,8 @@ export const useCertificateStore = create<CertificateState & { history: HistoryS
                 column: col,
                 x: 30,
                 y: 40 + s.fields.length * 20,
-                fontSize: 14,
-                color: "#000000",
+                fontSize: DEFAULT_FONT_SIZE,
+                color: DEFAULT_FIELD_COLOR,
                 align: "center",
               };
               push();
