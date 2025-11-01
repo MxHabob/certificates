@@ -15,46 +15,27 @@ export default defineConfig({
 
   build: {
     target: "es2020",
-    minify: "terser",
-    terserOptions: {
-      mangle: {
-        reserved: [
-          // Preserve PDF-lib class names
-          'PDFDocument', 'PDFPage', 'PDFFont', 'PDFImage',
-          'PDFForm', 'PDFTextField', 'PDFDropdown', 'PDFOptionList',
-          'PDFButton', 'PDFCheckBox', 'PDFRadioGroup', 'PDFSignature',
-          'PDFEmbeddedPage', 'PDFEmbeddedFile', 'PDFJavaScript',
-          'PDFObject', 'PDFRef', 'PDFStream', 'PDFArray', 'PDFDict',
-          'PDFName', 'PDFNumber', 'PDFHexString', 'PDFString',
-          'PDFNull', 'PDFBool', 'PDFOperator', 'PDFRawStream',
-          'PDFContentStream', 'PDFHeader', 'PDFTrailer', 'PDFXRef',
-          'PDFWriter', 'PDFReader', 'PDFObjectParser', 'PDFObjectCopier',
-          'PDFObjectStreamParser', 'PDFObjectStream', 'PDFPageEmbedder',
-          'PDFWidgetAnnotation', 'PDFAcroForm', 'PDFAcroTextField',
-          'PDFAcroComboBox', 'PDFAcroListBox', 'PDFAcroCheckBox',
-          'PDFAcroRadioButton', 'PDFAcroPushButton', 'PDFAcroSignature',
-          'PDFDocumentFactory', 'PDFDocumentWriter', 'StandardFonts',
-          'RGB', 'CMYK', 'Grayscale', 'HSB', 'Lab', 'ColorSpace',
-          'PDFInvalidObject', 'PDFContext',
-          // Comlink functions
-          'expose', 'wrap', 'transfer', 'proxy',
-          // Our functions
-          'generateAll', 'drawField', 'loadPdfLib', 'getFont', 'embedTemplate'
-        ],
-        keep_classnames: true, // Preserve class names
-        keep_fnames: true,     // Preserve function names
-      },
-      compress: {
-        drop_console: true,
-        keep_classnames: true, // Also preserve in compression
-        keep_fnames: true,
-      },
-    },
+    minify: "esbuild",
+    sourcemap: false, // Disable source maps for production
     rollupOptions: {
       output: {
-        manualChunks: {
-          pdf: ['pdf-lib', '@pdf-lib/fontkit'],
-          utils: ['jszip', 'file-saver', 'comlink', 'arabic-reshaper']
+        manualChunks: (id) => {
+          // More specific chunking strategy
+          if (id.includes('pdf-lib') || id.includes('fontkit')) {
+            return 'pdf';
+          }
+          if (id.includes('jszip') || id.includes('file-saver')) {
+            return 'zip';
+          }
+          if (id.includes('comlink')) {
+            return 'worker';
+          }
+          if (id.includes('arabic-reshaper')) {
+            return 'text';
+          }
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
         }
       }
     }
@@ -62,5 +43,21 @@ export default defineConfig({
 
   worker: {
     format: "es",
+    rollupOptions: {
+      output: {
+        // Specific configuration for worker output
+        format: 'es',
+        manualChunks: undefined, // No chunking in workers
+      }
+    }
   },
+
+  optimizeDeps: {
+    include: [
+      'pdf-lib',
+      '@pdf-lib/fontkit',
+      'arabic-reshaper',
+      'comlink'
+    ]
+  }
 });
