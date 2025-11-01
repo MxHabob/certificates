@@ -14,20 +14,13 @@ export default defineConfig({
   },
 
   build: {
-    minify: "esbuild",
     target: "es2020",
-
     rollupOptions: {
       output: {
         manualChunks: {
-          "pdf-lib": ["pdf-lib"],
-          "pdf-worker": ["./src/lib/pdf/pdf-generator.worker.ts"], // Optional: isolate worker
+          "pdf-worker": ["./src/lib/pdf/pdf-generator.worker.ts"],
         },
       },
     },
-  },
-
-  optimizeDeps: {
-    exclude: ["pdf-lib", "@pdf-lib/fontkit"],
   },
 });
