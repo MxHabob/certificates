@@ -10,7 +10,12 @@ import type { Field } from "@/types/certificate";
 import { MM_TO_PT, PROGRESS_UPDATE_INTERVAL, YIELD_INTERVAL } from "../constants";
 
 // Import arabic-reshaper - handle CommonJS module
+// Also support bidi visual reordering for correct RTL/LTR mixing
 let convertArabic: ((text: string) => string) | null = null;
+let bidiReorder: ((text: string) => string) | null = null;
+
+// Caches
+const reshapeCache = new Map<string, string>();
 
 // Initialize reshaper on first use
 async function ensureReshaper(): Promise<void> {
@@ -29,6 +34,24 @@ async function ensureReshaper(): Promise<void> {
     } catch {
       // Fallback if import fails
       convertArabic = (text: string) => text;
+    }
+  }
+}
+
+async function ensureBidi(): Promise<void> {
+  if (!bidiReorder) {
+    try {
+      const bidi = await import('bidi-js');
+      // Support both named and default exports
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const api: any = bidi?.default ?? bidi;
+      if (api && typeof api.reorderVisually === 'function') {
+        bidiReorder = (t: string) => api.reorderVisually(t);
+      } else {
+        bidiReorder = (t: string) => t;
+      }
+    } catch {
+      bidiReorder = (t: string) => t;
     }
   }
 }
@@ -114,11 +137,10 @@ async function embedTemplate(pdf: PDFDocument, file: File, pageWidth?: number, p
   if (pageWidth && pageHeight) {
     const pageWidthPt = pageWidth * MM_TO_PT;
     const pageHeightPt = pageHeight * MM_TO_PT;
-    // Scale template to fit page dimensions while maintaining aspect ratio
+    // Scale template to COVER the page (no empty margins). May crop slightly
     const scaleX = pageWidthPt / width;
     const scaleY = pageHeightPt / height;
-    // Use the smaller scale to ensure template fits within the page
-    scale = Math.min(scaleX, scaleY);
+    scale = Math.max(scaleX, scaleY);
     finalWidth = width * scale;
     finalHeight = height * scale;
   }
@@ -127,13 +149,18 @@ async function embedTemplate(pdf: PDFDocument, file: File, pageWidth?: number, p
 }
 
 async function reshapeArabic(text: string): Promise<string> {
+  // Fast path: cached
+  const cached = reshapeCache.get(text);
+  if (cached !== undefined) return cached;
+
   try {
-    await ensureReshaper();
-    if (!convertArabic) {
-      return text;
-    }
-    return convertArabic(text);
+    await Promise.all([ensureReshaper(), ensureBidi()]);
+    const shaped = convertArabic ? convertArabic(text) : text;
+    const visual = bidiReorder ? bidiReorder(shaped) : shaped;
+    reshapeCache.set(text, visual);
+    return visual;
   } catch {
+    reshapeCache.set(text, text);
     return text;
   }
 }
@@ -146,7 +173,8 @@ function drawField(
   font: PDFFont,
   pageH: number,
   reshapedText?: string,
-  fieldScale?: number
+  fieldScale?: number,
+  widthCache?: Map<string, number>
 ) {
   if (!text) return;
 
@@ -185,20 +213,49 @@ function drawField(
 
   let finalX = x;
   const align = f.align || "center";
+  const getWidth = (t: string, s: number): number => {
+    if (!widthCache) return font.widthOfTextAtSize(t, s);
+    const key = `${s}::${t}`;
+    const cached = widthCache.get(key);
+    if (cached !== undefined) return cached;
+    const w = font.widthOfTextAtSize(t, s);
+    widthCache.set(key, w);
+    return w;
+  };
+
+  let textWidth = getWidth(displayText, size);
   if (align === "center" || align === "right") {
-    const textWidth = font.widthOfTextAtSize(displayText, size);
     finalX = align === "center" ? x - textWidth / 2 : x - textWidth;
+  }
+
+  // Optional auto-fit within maxWidth_mm by shrinking font size (non-destructive)
+  let effectiveSize = size;
+  if (f.maxWidth_mm && f.maxWidth_mm > 0) {
+    const maxWidthPt = f.maxWidth_mm * MM_TO_PT * (fieldScale ?? 1);
+    if (textWidth > maxWidthPt) {
+      const minSize = Math.max(6, f.minFontSize ?? 8);
+      const scaleDown = maxWidthPt / textWidth;
+      const candidate = Math.max(minSize, Math.floor(size * scaleDown));
+      if (candidate !== size) {
+        effectiveSize = candidate;
+        textWidth = getWidth(displayText, effectiveSize);
+        if (align === "center") finalX = x - textWidth / 2;
+        else if (align === "right") finalX = x - textWidth;
+      }
+    }
   }
 
   // Handle rotation
   if (f.rotation && f.rotation !== 0) {
     page.pushGraphicsState();
-    // Translate to text position, rotate, then translate back
-    const centerX = finalX;
-    const centerY = y + size / 2;
-    page.translateContent(centerX, centerY);
+    // Rotate around visual anchor edge depending on alignment
+    let anchorX = finalX;
+    if (align === "center") anchorX = finalX + textWidth / 2;
+    else if (align === "right") anchorX = finalX + textWidth;
+    const centerY = y + effectiveSize / 2;
+    page.translateContent(anchorX, centerY);
     page.rotateDegrees(f.rotation);
-    page.translateContent(-centerX, -centerY);
+    page.translateContent(-anchorX, -centerY);
   }
 
   // Draw text with letter spacing if specified
@@ -212,7 +269,7 @@ function drawField(
   } = {
     x: finalX,
     y,
-    size,
+    size: effectiveSize,
     font,
     color,
   };
@@ -226,7 +283,7 @@ function drawField(
     let currentX = finalX;
     for (let i = 0; i < displayText.length; i++) {
       const char = displayText[i];
-      const charWidth = font.widthOfTextAtSize(char, size);
+      const charWidth = getWidth(char, effectiveSize);
       page.drawText(char, {
         ...textOptions,
         x: currentX,
@@ -240,12 +297,12 @@ function drawField(
 
   // Draw underline if specified
   if (f.underline) {
-    const textWidth = font.widthOfTextAtSize(displayText, size);
+    const textWidth = getWidth(displayText, effectiveSize);
     const underlineY = y - 2; // 2 points below baseline
     page.drawLine({
       start: { x: finalX, y: underlineY },
       end: { x: finalX + textWidth, y: underlineY },
-      thickness: size * 0.05, // 5% of font size
+      thickness: effectiveSize * 0.05, // 5% of font size
       color,
       opacity,
     });
@@ -272,6 +329,9 @@ const api = {
   ) {
     const buffers: Uint8Array[] = [];
 
+    // Ensure text shaper/BiDi are ready upfront
+    await Promise.all([ensureReshaper(), ensureBidi()]);
+
     let sharedPdf: PDFDocument | null = null;
     let sharedFont: PDFFont | null = null;
     let sharedTemplatePng: PDFImage | null = null;
@@ -297,7 +357,7 @@ const api = {
     }
 
     // Pre-load shared resources for single PDF mode
-    let sharedTemplateScale: number | undefined;
+    // track shared template sizing only for image placement
     if (single) {
       sharedPdf = await PDFDocument.create();
       sharedFont = await getFont(sharedPdf);
@@ -310,7 +370,7 @@ const api = {
         );
         sharedTemplatePng = result.pngImage;
         sharedTemplateSize = result.size;
-        sharedTemplateScale = result.scale;
+        // scale used only for image size
       }
     }
 
@@ -320,14 +380,13 @@ const api = {
       let font: PDFFont;
       let templatePng: PDFImage | null = null;
       let templateSize: { w: number; h: number } | null = null;
-      let templateScale: number | undefined;
+      // template scale is not used for field placement
 
       if (single) {
         currentPdf = sharedPdf!;
         font = sharedFont!;
         templatePng = sharedTemplatePng;
         templateSize = sharedTemplateSize;
-        templateScale = sharedTemplateScale;
         page = currentPdf.addPage(pageSize);
       } else {
         currentPdf = await PDFDocument.create();
@@ -341,16 +400,19 @@ const api = {
           );
           templatePng = result.pngImage;
           templateSize = result.size;
-          templateScale = result.scale;
+          // result.scale is only used for image sizing, not fields
         }
         page = currentPdf.addPage(pageSize);
       }
 
+      // Width cache per document/font
+      const widthCache = new Map<string, number>();
+
       // Draw template image (if exists) - scale to fill page exactly
       if (templatePng && templateSize) {
-        // Center the template if it doesn't fill the entire page
-        const offsetX = templateSize.w < pageSize[0] ? (pageSize[0] - templateSize.w) / 2 : 0;
-        const offsetY = templateSize.h < pageSize[1] ? (pageSize[1] - templateSize.h) / 2 : 0;
+        // Always center image, allowing negative offsets when image covers page
+        const offsetX = (pageSize[0] - templateSize.w) / 2;
+        const offsetY = (pageSize[1] - templateSize.h) / 2;
         page.drawImage(templatePng, {
           x: offsetX,
           y: offsetY,
@@ -359,15 +421,9 @@ const api = {
         });
       }
 
-      // Calculate field scale factor based on template-to-page scaling
-      // If template dimensions were provided, fields are positioned relative to those dimensions
-      // We need to scale them to match the actual template size on the page
-      let fieldScale = 1;
-      if (templateScale && options.pageWidth_mm && options.pageHeight_mm) {
-        // Fields are positioned in mm relative to template dimensions
-        // Template is scaled by templateScale, so fields need same scaling
-        fieldScale = templateScale;
-      }
+      // Fields are defined in page millimeters; when page dimensions are provided
+      // we draw exactly on those coordinates (no extra scaling needed)
+      const fieldScale = 1;
 
       // Draw fields
       const student = students[i];
@@ -380,22 +436,8 @@ const api = {
           // Reshape Arabic text
           const reshaped = await reshapeArabic(txt);
           
-          // Calculate field position accounting for template scaling and centering
-          // Fields are positioned in mm relative to template dimensions
-          // Template is scaled and may be centered on page
-          const templateOffsetX = templateSize && templateSize.w < pageSize[0] ? (pageSize[0] - templateSize.w) / 2 : 0;
-          const templateOffsetY = templateSize && templateSize.h < pageSize[1] ? (pageSize[1] - templateSize.h) / 2 : 0;
-          
-          // Create adjusted field with scaled and offset positions
-          const adjustedField: Field = {
-            ...f,
-            // Convert mm to points, apply scale, then add template offset
-            x: (f.x * MM_TO_PT * fieldScale + templateOffsetX) / MM_TO_PT,
-            y: (f.y * MM_TO_PT * fieldScale + templateOffsetY) / MM_TO_PT,
-          };
-          
-          // Draw field without additional scaling since we already applied it above
-          drawField(page, txt, adjustedField, font, page.getHeight(), reshaped, 1);
+          // Draw field directly at stored page-relative coordinates
+          drawField(page, txt, f, font, page.getHeight(), reshaped, fieldScale, widthCache);
         }
       }
 

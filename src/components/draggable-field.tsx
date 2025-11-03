@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useState, useEffect } from "react";
-import { pxToMm } from "@/lib/utils";
+import { pxToMm, snapMm, type RectMm } from "@/lib/utils";
 import type { Field } from "@/types/certificate";
 
 interface Props {
@@ -11,9 +11,12 @@ interface Props {
   isSelected: boolean;
   canvasRect: DOMRect | null;
   zoom: number;
+  gridStepMm?: number;
+  showGuides?: boolean;
+  allRects?: RectMm[];
 }
 
-export function DraggableField({ field, onMove, onSelect, isSelected, canvasRect, zoom }: Props) {
+export function DraggableField({ field, onMove, onSelect, isSelected, canvasRect, zoom, gridStepMm = 0, showGuides = true }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const startPos = useRef({ clientX: 0, clientY: 0, fieldX: 0, fieldY: 0 });
@@ -90,8 +93,12 @@ export function DraggableField({ field, onMove, onSelect, isSelected, canvasRect
         const deltaYmm = pxToMm(deltaYPx / currentZoom);
 
         // Calculate new position
-        const newX = Math.max(0, startPos.current.fieldX + deltaXmm);
-        const newY = Math.max(0, startPos.current.fieldY + deltaYmm);
+        let newX = Math.max(0, startPos.current.fieldX + deltaXmm);
+        let newY = Math.max(0, startPos.current.fieldY + deltaYmm);
+        if (gridStepMm > 0) {
+          newX = snapMm(newX, gridStepMm);
+          newY = snapMm(newY, gridStepMm);
+        }
 
         // Update field position
         onMoveRef.current(fieldIdRef.current, newX, newY);

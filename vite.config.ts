@@ -29,7 +29,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ["react", "react-dom"],
-          pdf: ["pdf-lib", "@pdf-lib/fontkit", "arabic-reshaper"],
+          pdf: ["pdf-lib", "@pdf-lib/fontkit", "arabic-reshaper", "bidi-js"],
           ui: ["@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-select"],
         },
         chunkFileNames: "assets/js/[name]-[hash].js",

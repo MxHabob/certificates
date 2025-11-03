@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Spinner } from "@/components/ui/spinner";
 import { TemplateCanvas } from "./template-canvas";
+import { SvgCanvas } from "./svg-canvas";
 import { FieldControls } from "./field-controls";
 import { ColumnPicker } from "./column-picker";
 import { PreviewDialog } from "./preview-dialog";
@@ -78,11 +79,28 @@ export function Certificates() {
       }
       const url = URL.createObjectURL(f);
       const img = new Image();
-      img.onload = () => {
-        const PIXELS_PER_MM = 300 / 25.4;
-        const width_mm = img.naturalWidth / PIXELS_PER_MM;
-        const height_mm = img.naturalHeight / PIXELS_PER_MM;
-        
+      img.onload = async () => {
+        let width_mm: number;
+        let height_mm: number;
+        try {
+          const buf = await f.arrayBuffer();
+          // Try pHYs chunk first
+          const { parsePngPixelsPerMm } = await import("@/lib/utils");
+          const pxPerMm = parsePngPixelsPerMm(buf);
+          if (pxPerMm && pxPerMm > 0) {
+            width_mm = img.naturalWidth / pxPerMm;
+            height_mm = img.naturalHeight / pxPerMm;
+          } else {
+            // fallback to 300 DPI assumption
+            const PIXELS_PER_MM = 300 / 25.4;
+            width_mm = img.naturalWidth / PIXELS_PER_MM;
+            height_mm = img.naturalHeight / PIXELS_PER_MM;
+          }
+        } catch {
+          const PIXELS_PER_MM = 300 / 25.4;
+          width_mm = img.naturalWidth / PIXELS_PER_MM;
+          height_mm = img.naturalHeight / PIXELS_PER_MM;
+        }
         setTemplate(f, url, width_mm, height_mm);
         toast.success("تم رفع القالب");
       };
@@ -304,7 +322,21 @@ export function Certificates() {
         <div className="space-y-4">
           <FieldControls columns={columns} onAddFromColumn={() => setShowExcel(true)} />
           <div className="space-y-4">
-            <TemplateCanvas />
+            {useCertificateStore.getState().pageWidth_mm && useCertificateStore.getState().pageHeight_mm ? (
+              <SvgCanvas
+                templateUrl={useCertificateStore.getState().templateUrl}
+                pageWidth_mm={useCertificateStore.getState().pageWidth_mm}
+                pageHeight_mm={useCertificateStore.getState().pageHeight_mm}
+                fields={fields}
+                selectedId={useCertificateStore.getState().selectedId}
+                zoom={useCertificateStore.getState().zoom}
+                onSelect={id => useCertificateStore.getState().setSelected(id)}
+                onMove={(id, x, y) => useCertificateStore.getState().moveField(id, x, y)}
+                gridStepMm={1}
+              />
+            ) : (
+              <TemplateCanvas />
+            )}
           </div>
         </div>
       </section>

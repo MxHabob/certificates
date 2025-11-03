@@ -17,4 +17,7 @@ export interface Field {
   opacity?: number;     // 0-1
   letterSpacing?: number; // pt
   lineHeight?: number;   // multiplier (e.g., 1.2)
+  // Smart layout (optional)
+  maxWidth_mm?: number;   // shrink text to fit this width if provided
+  minFontSize?: number;   // lower bound when auto-shrinking
 }

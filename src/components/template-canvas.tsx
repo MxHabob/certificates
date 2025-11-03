@@ -115,9 +115,31 @@ export function TemplateCanvas() {
               <img
                 src={templateUrl}
                 alt="قالب"
-                className="w-full h-full object-cover select-none pointer-events-none"
+                className="w-full h-full object-contain select-none pointer-events-none"
                 draggable={false}
               />
+              {/* Rulers */}
+              {pageWidth_mm && pageHeight_mm && (
+                <>
+                  <div className="absolute left-0 top-0 h-6 w-full bg-muted/60 text-[10px] text-muted-foreground select-none flex">
+                    {Array.from({ length: Math.ceil(pageWidth_mm) + 1 }).map((_, i) => (
+                      <div key={i} style={{ width: mmToPx(1) * zoom }} className="relative flex items-end justify-center">
+                        <div className={`h-3 w-px bg-foreground/30 ${i % 5 === 0 ? 'h-4 bg-foreground/60' : ''}`} />
+                        {i % 10 === 0 && <span className="absolute -bottom-3">{i}</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="absolute left-0 top-0 h-full w-6 bg-muted/60 text-[10px] text-muted-foreground select-none">
+                    {Array.from({ length: Math.ceil(pageHeight_mm) + 1 }).map((_, i) => (
+                      <div key={i} style={{ height: mmToPx(1) * zoom }} className="relative flex items-center justify-end">
+                        <div className={`w-3 h-px bg-foreground/30 ${i % 5 === 0 ? 'w-4 bg-foreground/60' : ''}`} />
+                        {i % 10 === 0 && <span className="absolute -right-3">{i}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
               {fields
                 .filter(f => f.enabled !== false)
                 .map(f => (
@@ -129,6 +151,9 @@ export function TemplateCanvas() {
                     isSelected={f.id === selectedId}
                     canvasRect={rect}
                     zoom={zoom}
+                    // snapping
+                    gridStepMm={1}
+                    showGuides
                   />
                 ))}
             </div>
