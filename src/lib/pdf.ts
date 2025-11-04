@@ -2,18 +2,18 @@ import html2canvas from "html2canvas"
 import jsPDF from "jspdf"
 import type { Template } from "@/types/template"
 
-/* ------------------------------------------------------------------ */
-/* 1. oklch → rgb (آمن وسريع)                                         */
-/* ------------------------------------------------------------------ */
 const oklchToRgb = (s: string): string => {
   const m = s.match(/oklch\(([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\)/i)
   if (!m) return "rgb(0,0,0)"
-  const lRaw = parseFloat(m[1])
+  const lRaw = Number.parseFloat(m[1])
   const l = m[2] === "%" ? lRaw / 100 : lRaw
-  const c = parseFloat(m[3])
-  const h = parseFloat(m[4])
-  const a = m[5] ? parseFloat(m[5]) : 1
-  if (c === 0) { const v = Math.round(l * 255); return a < 1 ? `rgba(${v},${v},${v},${a})` : `rgb(${v},${v},${v})` }
+  const c = Number.parseFloat(m[3])
+  const h = Number.parseFloat(m[4])
+  const a = m[5] ? Number.parseFloat(m[5]) : 1
+  if (c === 0) {
+    const v = Math.round(l * 255)
+    return a < 1 ? `rgba(${v},${v},${v},${a})` : `rgb(${v},${v},${v})`
+  }
   const rad = (h * Math.PI) / 180
   const r = Math.round(255 * (l + c * Math.cos(rad)))
   const g = Math.round(255 * (l + c * Math.sin(rad)))
@@ -22,39 +22,23 @@ const oklchToRgb = (s: string): string => {
   return a < 1 ? `rgba(${clamp(r)},${clamp(g)},${clamp(b)},${a})` : `rgb(${clamp(r)},${clamp(g)},${clamp(b)})`
 }
 
-/* ------------------------------------------------------------------ */
-/* 2. تحويل كل الألوان إلى RGB قبل html2canvas                        */
-/* ------------------------------------------------------------------ */
 const forceRgb = (root: HTMLElement): void => {
-  const replaceOklch = (val: string): string =>
-    val.replace(/oklch\([^)]*\)/gi, (m) => oklchToRgb(m))
+  const replaceOklch = (val: string): string => val.replace(/oklch\([^)]*\)/gi, (m) => oklchToRgb(m))
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT)
   let node: HTMLElement | null
   while ((node = walker.nextNode() as HTMLElement | null)) {
-    const cs = getComputedStyle(node), style = node.style
+    const cs = getComputedStyle(node)
+    const style = node.style
+
     const convert = (prop: keyof CSSStyleDeclaration, fallback = "rgb(0,0,0)") => {
       const val = cs[prop] as string
-      if (val?.includes("oklch")) (style as unknown as Record<string, string>)[prop as string] = replaceOklch(val) || fallback
+      if (val?.includes("oklch")) {
+        ;(style as any)[prop] = replaceOklch(val) || fallback
+      }
     }
+
     convert("color")
-    // background color
-    const isRoot = node === root
-    const bgColor = cs.backgroundColor as string
-    if (bgColor?.includes("oklch")) {
-      ;(style as unknown as Record<string, string>)["backgroundColor"] = isRoot ? "#ffffff" : "transparent"
-    } else if (bgColor) {
-      ;(style as unknown as Record<string, string>)["backgroundColor"] = bgColor
-    }
-    // background shorthand and images/gradients
-    const bg = cs.background as string
-    if (bg && bg.includes("oklch")) {
-      style.background = isRoot ? "#ffffff" : "none"
-    }
-    // Always remove background images to avoid color functions inside gradients
-    if (cs.backgroundImage && cs.backgroundImage !== "none") {
-      style.backgroundImage = "none"
-    }
     convert("borderTopColor")
     convert("borderRightColor")
     convert("borderBottomColor")
@@ -62,17 +46,30 @@ const forceRgb = (root: HTMLElement): void => {
     convert("outlineColor")
     convert("columnRuleColor")
     convert("caretColor")
-    // shadow props can include multiple colors; replace occurrences
+
+    const bgColor = cs.backgroundColor as string
+    if (bgColor?.includes("oklch")) {
+      style.backgroundColor = node === root ? "#ffffff" : "transparent"
+    }
+
+    const bg = cs.background as string
+    if (bg && bg.includes("oklch")) {
+      style.background = node === root ? "#ffffff" : "none"
+    }
+
+    const bgImage = cs.backgroundImage
+    if (bgImage && bgImage !== "none" && bgImage.includes("oklch")) {
+      style.backgroundImage = "none"
+    }
+
     const boxShadow = cs.boxShadow
     if (boxShadow?.includes("oklch")) style.boxShadow = replaceOklch(boxShadow)
+
     const textShadow = cs.textShadow
     if (textShadow?.includes("oklch")) style.textShadow = replaceOklch(textShadow)
-    // CSS Variables (Tailwind)
-    const cssVarsToNormalize = [
-      "--background","--foreground","--card","--muted","--accent","--border","--ring",
-      "--primary","--secondary","--destructive",
-    ]
-    for (const name of cssVarsToNormalize) {
+
+    const cssVars = ["--background", "--foreground", "--card", "--muted", "--accent", "--border", "--ring", "--primary", "--secondary", "--destructive"]
+    for (const name of cssVars) {
       const val = cs.getPropertyValue(name).trim()
       if (val && val.includes("oklch")) style.setProperty(name, replaceOklch(val))
     }
@@ -84,9 +81,6 @@ const forceRgb = (root: HTMLElement): void => {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* 2.b تحميل صورة كـ DataURL لضمان عملها مع html2canvas/CORS           */
-/* ------------------------------------------------------------------ */
 const toDataUrl = async (url: string): Promise<string | null> => {
   try {
     const res = await fetch(url, { mode: "cors", credentials: "omit", cache: "force-cache" })
@@ -94,7 +88,7 @@ const toDataUrl = async (url: string): Promise<string | null> => {
     const blob = await res.blob()
     return await new Promise((resolve) => {
       const reader = new FileReader()
-      reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null)
+      reader.onloadend = () => resolve(reader.result as string)
       reader.readAsDataURL(blob)
     })
   } catch {
@@ -102,46 +96,19 @@ const toDataUrl = async (url: string): Promise<string | null> => {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* 3. إعادة تعيين التنسيق + أسلوب تعطيل متغيرات OKLCH عالمياً          */
-/* ------------------------------------------------------------------ */
 const createResetStyle = (): HTMLStyleElement => {
   const s = document.createElement("style")
   s.textContent = `
-    .pdf-container {
-      all: initial !important;
-      display: block !important;
-      position: absolute !important;
-      background:#fff !important;
-      isolation:isolate !important;
-      font-family: Arial, sans-serif !important;
-    }
-    .pdf-container, .pdf-container * {
-      box-shadow: none !important;
-      text-shadow: none !important;
-      background-image: none !important;
-      filter: none !important;
-    }
-    .pdf-container *::before,
-    .pdf-container *::after {
-      content: none !important;
-      background: none !important;
-      background-image: none !important;
-      box-shadow: none !important;
-      text-shadow: none !important;
-    }
-    .pdf-container img { max-width:100%; height:auto; display:block; }
+    .pdf-container { all: initial !important; display: block !important; position: relative !important; background:#fff !important; isolation:isolate !important; font-family: Arial, sans-serif !important; }
+    .pdf-container * { box-shadow: none !important; text-shadow: none !important; filter: none !important; }
+    .pdf-container *:not(img) { background-image: none !important; }
+    .pdf-container *::before, .pdf-container *::after { content: none !important; background: none !important; }
+    .pdf-container img { max-width:100%; height:auto; display:block; pointer-events: none; }
+    .pdf-container img[data-bg="1"] { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; z-index: 0 !important; }
   `
   return s
 }
 
-// Removed global theme override. We now only set safe CSS variables on the
-// isolated `.pdf-container` element and inside the html2canvas clone. This
-// prevents theme flashing or layout shifts in the main app during export.
-
-/* ------------------------------------------------------------------ */
-/* 4. تصدير PDF – معالجة الأخطاء + تسجيل واضح                         */
-/* ------------------------------------------------------------------ */
 type ExportOptions = {
   scale?: number
   quality?: number
@@ -151,11 +118,13 @@ type ExportOptions = {
 
 type DataRow = Record<string, unknown>
 
+// ... (oklchToRgb, forceRgb, toDataUrl, createResetStyle) تبقى كما هي ...
+
 export const exportBatchPDF = async (
   data: DataRow[],
   template: Template,
   filename: string,
-  options: ExportOptions = {}
+  options: ExportOptions = {},
 ): Promise<void> => {
   const { scale = 1.5, quality = 0.95, onProgress, signal } = options
   const pdf = new jsPDF({
@@ -167,105 +136,73 @@ export const exportBatchPDF = async (
   const reset = createResetStyle()
   document.head.appendChild(reset)
 
+  let container: HTMLDivElement | null = null
+  let bgEl: HTMLImageElement | null = null
+  let fieldEls: { f: any; el: HTMLDivElement }[] = []
+
   try {
-    // حاوية واحدة قابلة لإعادة الاستخدام
-    const container = document.createElement("div")
+    container = document.createElement("div")
     container.className = "pdf-container"
     container.style.cssText = `
-      left:-9999px; top:0; width:${template.width}px; height:${template.height}px;
-      overflow:hidden; background:#fff;
+      position: fixed;
+      left: 0; top: 0;
+      width: ${template.width}px; height: ${template.height}px;
+      overflow: hidden;
+      background: #fff;
+      z-index: -9999;
+      opacity: 0;
+      pointer-events: none;
     `
     document.body.appendChild(container)
-    // Force safe CSS variables on container to defeat oklch-based tokens
-    const safeVars: Record<string, string> = {
-      "--background": "#ffffff",
-      "--foreground": "#111111",
-      "--card": "#ffffff",
-      "--card-foreground": "#111111",
-      "--popover": "#ffffff",
-      "--popover-foreground": "#111111",
-      "--primary": "#222222",
-      "--primary-foreground": "#fafafa",
-      "--secondary": "#f3f3f3",
-      "--secondary-foreground": "#222222",
-      "--muted": "#f3f3f3",
-      "--muted-foreground": "#6b7280",
-      "--accent": "#f3f3f3",
-      "--accent-foreground": "#222222",
-      "--destructive": "#dc2626",
-      "--border": "#e5e7eb",
-      "--input": "#e5e7eb",
-      "--ring": "#a3a3a3",
-      "--chart-1": "#7c3aed",
-      "--chart-2": "#06b6d4",
-      "--chart-3": "#2563eb",
-      "--chart-4": "#22c55e",
-      "--chart-5": "#f59e0b",
-      "--sidebar": "#fafafa",
-      "--sidebar-foreground": "#111111",
-      "--sidebar-primary": "#222222",
-      "--sidebar-primary-foreground": "#fafafa",
-      "--sidebar-accent": "#f3f3f3",
-      "--sidebar-accent-foreground": "#222222",
-      "--sidebar-border": "#e5e7eb",
-      "--sidebar-ring": "#a3a3a3",
-    }
+
+    // متغيرات آمنة
+    const safeVars: Record<string, string> = { /* ... */ }
     for (const [k, v] of Object.entries(safeVars)) container.style.setProperty(k, v)
 
-    // الخلفية (تحميل مرة واحدة)
-    let bgEl: HTMLImageElement | null = null
+    // تحميل الخلفية
     if (template.backgroundImage) {
       bgEl = document.createElement("img")
       bgEl.crossOrigin = "anonymous"
-      bgEl.setAttribute("referrerpolicy", "no-referrer")
-      bgEl.decoding = "sync"
-      bgEl.loading = "eager"
       bgEl.setAttribute("data-bg", "1")
-      bgEl.style.cssText = `position:absolute;top:0;left:0;width:${template.width}px;height:${template.height}px;z-index:0;object-fit:cover;`
+      bgEl.style.cssText = `
+        position: absolute; top: 0; left: 0;
+        width: ${template.width}px; height: ${template.height}px;
+        object-fit: cover; z-index: 0; pointer-events: none;
+      `
       container.appendChild(bgEl)
-      try {
-        const img = new Image()
-        img.crossOrigin = "anonymous"
-        img.setAttribute("referrerpolicy", "no-referrer")
-        const loaded = new Promise<void>((resolve) => {
-          img.onload = () => resolve()
-          img.onerror = () => {
-            console.warn(`[PDF] فشل تحميل الصورة: ${template.backgroundImage}`)
-            resolve()
+
+      const dataUrl = await toDataUrl(template.backgroundImage)
+      if (dataUrl) {
+        bgEl.src = dataUrl
+        await new Promise<void>((resolve, reject) => {
+          const onLoad = () => {
+            if ('decode' in bgEl!) {
+              bgEl!.decode().then(resolve).catch(resolve)
+            } else resolve()
+          }
+          if (bgEl!.complete && bgEl!.naturalWidth > 0) {
+            onLoad()
+          } else {
+            bgEl!.onload = onLoad
+            bgEl!.onerror = reject
           }
         })
-        img.src = template.backgroundImage
-        await Promise.race([
-          loaded,
-          new Promise<void>((r) => setTimeout(r, 5000)),
-        ])
-        // حاول تحويل الصورة إلى DataURL لتجاوز مشاكل CORS في html2canvas
-        const dataUrl = await toDataUrl(img.src)
-        bgEl.src = dataUrl || img.src
-        if ("decode" in bgEl && typeof (bgEl as HTMLImageElement).decode === "function") {
-          try {
-            await (bgEl as HTMLImageElement).decode()
-          } catch (err) {
-            // Some browsers may throw on decode; continue without blocking
-            console.debug("[PDF] decode() not supported or failed:", err)
-          }
-        }
-      } catch (e) {
-        console.warn("[PDF] خطأ في تحميل الصورة:", e)
+      } else {
+        bgEl.src = template.backgroundImage
       }
     }
-
-    // عناصر الحقول (تبنى مرة واحدة ثم نحدث النص فقط)
-    const fieldEls = template.fields.map((f) => {
+    console.log("BG SRC:", bgEl?.src?.slice(0, 50))
+    // الحقول
+    fieldEls = template.fields.map((f) => {
       const el = document.createElement("div")
       const color = /^#|rgb/.test(f.color || "") ? f.color : "#000000"
       el.style.cssText = `
-        position:absolute; left:${f.x}px; top:${f.y}px;
-        font-size:${f.fontSize || 16}px; font-family:${f.fontFamily || "Arial"};
-        font-weight:${f.fontWeight || "normal"}; text-align:${f.textAlign || "right"};
-        white-space:nowrap; direction:rtl; color:${color}; background:transparent; z-index:1;
+        position: absolute; left: ${f.x}px; top: ${f.y}px;
+        font-size: ${f.fontSize || 16}px; font-family: ${f.fontFamily || "Arial"};
+        font-weight: ${f.fontWeight || "normal"}; text-align: ${f.textAlign || "right"};
+        white-space: nowrap; direction: rtl; color: ${color}; z-index: 1;
       `
-      container.appendChild(el)
+      container!.appendChild(el)
       return { f, el }
     })
 
@@ -274,18 +211,20 @@ export const exportBatchPDF = async (
       const row = data[i]
       onProgress?.(i, data.length)
 
-      // تحديث النصوص فقط
-      for (const { f, el } of fieldEls) {
+      // تحديث النصوص
+      fieldEls.forEach(({ f, el }) => {
         const value = row[f.name as keyof DataRow]
         el.textContent = value != null ? String(value) : `{${f.name}}`
-      }
+      })
 
-      // تحويل الألوان
-      forceRgb(container)
+      // تأخير الرسم
+      await new Promise(r => setTimeout(r, 50))
+      await new Promise(requestAnimationFrame)
       await new Promise(requestAnimationFrame)
 
-      // التقاط
-      const canvas = await html2canvas(container, {
+      forceRgb(container!)
+
+      const canvas = await html2canvas(container!, {
         scale,
         useCORS: true,
         allowTaint: true,
@@ -293,69 +232,17 @@ export const exportBatchPDF = async (
         logging: false,
         width: template.width,
         height: template.height,
-        onclone: (clonedDoc: Document) => {
-          const clonedContainer = clonedDoc.querySelector('.pdf-container') as HTMLElement | null
-          if (!clonedContainer) return
-          // inject reset styles into the cloned document
-          const resetInClone = clonedDoc.createElement('style')
-          resetInClone.textContent = `
-            .pdf-container, .pdf-container * { box-shadow:none!important; text-shadow:none!important; background-image:none!important; filter:none!important; }
-            .pdf-container *::before, .pdf-container *::after { content:none!important; background:none!important; background-image:none!important; box-shadow:none!important; text-shadow:none!important; }
-          `
-          clonedDoc.head.appendChild(resetInClone)
-          // enforce safe vars in clone (on container)
-          const setVar = (k: string, v: string) => clonedContainer.style.setProperty(k, v)
-          const cloneVars: Record<string,string> = {
-            "--background": "#ffffff",
-            "--foreground": "#111111",
-            "--card": "#ffffff",
-            "--card-foreground": "#111111",
-            "--popover": "#ffffff",
-            "--popover-foreground": "#111111",
-            "--primary": "#222222",
-            "--primary-foreground": "#fafafa",
-            "--secondary": "#f3f3f3",
-            "--secondary-foreground": "#222222",
-            "--muted": "#f3f3f3",
-            "--muted-foreground": "#6b7280",
-            "--accent": "#f3f3f3",
-            "--accent-foreground": "#222222",
-            "--destructive": "#dc2626",
-            "--border": "#e5e7eb",
-            "--input": "#e5e7eb",
-            "--ring": "#a3a3a3",
+        onclone: (clonedDoc) => {
+          const clonedBg = clonedDoc.querySelector('img[data-bg="1"]') as HTMLImageElement
+          if (clonedBg && bgEl?.src) {
+            clonedBg.src = bgEl.src
+            clonedBg.width = template.width
+            clonedBg.height = template.height
+            clonedBg.style.width = template.width + 'px'
+            clonedBg.style.height = template.height + 'px'
           }
-          for (const [k,v] of Object.entries(cloneVars)) setVar(k,v)
-          // Also ensure the root/background of the cloned document is plain white
-          const htmlEl = clonedDoc.documentElement as HTMLElement
-          const bodyEl = clonedDoc.body as HTMLElement
-          if (htmlEl) htmlEl.style.backgroundColor = '#ffffff'
-          if (bodyEl) bodyEl.style.backgroundColor = '#ffffff'
-          // Ensure background image in clone has correct sizing and source
-          const clonedBg = clonedContainer.querySelector('img[data-bg="1"]') as HTMLImageElement | null
-          if (clonedBg) {
-            clonedBg.crossOrigin = 'anonymous'
-            clonedBg.setAttribute('referrerpolicy', 'no-referrer')
-            clonedBg.style.position = 'absolute'
-            clonedBg.style.top = '0'
-            clonedBg.style.left = '0'
-            clonedBg.style.width = `${template.width}px`
-            clonedBg.style.height = `${template.height}px`
-            clonedBg.style.objectFit = 'cover'
-            clonedBg.style.zIndex = '0'
-            if (!clonedBg.src) clonedBg.src = (bgEl && bgEl.src) || (template.backgroundImage as string)
-          }
-          // scrub colors across the WHOLE cloned document to eliminate any OKLCH
-          try {
-            // Normalize from the top to catch any inherited oklch values
-            forceRgb(htmlEl)
-          } catch {
-            // ignore
-          }
-        }
-      }).catch(err => {
-        console.error("[PDF] فشل html2canvas:", err)
-        throw err
+          forceRgb(clonedDoc.documentElement)
+        },
       })
 
       const imgData = canvas.toDataURL("image/jpeg", quality)
@@ -363,18 +250,13 @@ export const exportBatchPDF = async (
       pdf.addImage(imgData, "JPEG", 0, 0, template.width, template.height)
     }
 
-    // آخر تقدم
     onProgress?.(data.length, data.length)
-
-    // إزالة الحاوية
-    document.body.removeChild(container)
-
-    console.log(`[PDF] تم حفظ الملف: ${filename}.pdf`)
     pdf.save(`${filename}.pdf`)
-  } catch (err: unknown) {
-    console.error("[PDF] خطأ كامل:", err)
+  } catch (err) {
+    console.error("[PDF] خطأ:", err)
     throw err
   } finally {
+    if (container?.parentNode) document.body.removeChild(container)
     document.head.removeChild(reset)
   }
 }

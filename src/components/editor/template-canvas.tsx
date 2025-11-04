@@ -3,8 +3,8 @@
 import type React from "react"
 
 import { useRef, useState, useCallback } from "react"
-import { useTemplateStore } from "@/store/templateStore"
-import { DraggableField } from "./DraggableField"
+import { useTemplateStore } from "@/store/use-template-store"
+import { DraggableField } from "./draggable-field"
 import { Button } from "@/components/ui/button"
 import { Upload, Trash2 } from "lucide-react"
 
@@ -120,8 +120,10 @@ export function TemplateCanvas() {
       >
         {currentTemplate.backgroundImage && (
           <img
-            src={currentTemplate.backgroundImage || "/placeholder.svg"}
-            alt="Template background"
+            src={currentTemplate.backgroundImage}
+            alt="bg"
+            data-bg="1"
+            crossOrigin="anonymous"
             className="absolute inset-0 w-full h-full object-cover pointer-events-none"
           />
         )}

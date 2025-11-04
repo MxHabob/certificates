@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useRef, useState, useCallback, useEffect } from "react"
-import { useTemplateStore } from "@/store/templateStore"
+import { useTemplateStore } from "@/store/use-template-store"
 import { Trash2, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"

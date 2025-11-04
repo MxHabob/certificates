@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { useTemplateStore } from "@/store/templateStore"
+import { useTemplateStore } from "@/store/use-template-store"
 import { Plus, Trash2, Copy, Check } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 

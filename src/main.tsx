@@ -11,7 +11,7 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme"> 
      <div dir="rtl" className="font-sans">
        <App />
-       <Toaster />
+       <Toaster position='top-center' />
      </div>
     </ThemeProvider>
   </StrictMode>,
