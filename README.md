@@ -1,147 +1,73 @@
-# Certificate Generator - مولد الشهادات
+# React + TypeScript + Vite
 
-A production-ready, high-performance web application for generating certificates from Excel data with customizable templates. Built with React, TypeScript, and PDF-lib.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Features
+Currently, two official plugins are available:
 
-- 📊 **Excel/CSV Import**: Parse student data from Excel or CSV files
-- 🎨 **Template Customization**: Upload PNG templates and position fields dynamically
-- 🎯 **Drag & Drop Fields**: Intuitive interface for positioning text fields on certificates
-- 🌍 **Arabic Support**: Full RTL support with Arabic text reshaping
-- 📄 **Batch PDF Generation**: Generate individual PDFs or a single combined PDF
-- ⚡ **Performance Optimized**: Web Worker-based PDF generation with caching
-- 🎛️ **Field Controls**: Adjust font size, color, alignment, and position
-- 👀 **Live Preview**: Preview certificates before generation
-- 💾 **Auto-save**: Persistent state with undo/redo functionality
-- 🌙 **Dark Mode**: Beautiful dark/light theme support
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## Technology Stack
+## React Compiler
 
-- **Frontend**: React 19, TypeScript, Vite
-- **UI**: Tailwind CSS, Radix UI components
-- **State Management**: Zustand with persistence
-- **PDF Generation**: PDF-lib with Web Workers
-- **Arabic Text**: Arabic-reshaper
-- **Build**: Vite with optimized production builds
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Getting Started
+## Expanding the ESLint configuration
 
-### Prerequisites
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-- Node.js 20+ 
-- npm or yarn
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-### Installation
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-## Docker Deployment
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-### Build Docker Image
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-```bash
-docker build -t certificate-generator .
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
-
-### Run Container
-
-```bash
-docker run -d -p 80:80 certificate-generator
-```
-
-The application will be available at `http://localhost`
-
-## Production Features
-
-### Performance Optimizations
-
-- ✅ Font and template caching
-- ✅ Web Worker-based PDF generation
-- ✅ Code splitting and chunk optimization
-- ✅ Asset optimization and compression
-- ✅ Production-ready nginx configuration
-
-### Fixed Issues
-
-- ✅ **Field Positioning**: Fixed zoom-aware drag calculations
-- ✅ **Template Scaling**: Correct template-to-PDF dimension mapping
-- ✅ **Error Handling**: Comprehensive error messages and validation
-- ✅ **Type Safety**: Full TypeScript coverage with proper types
-- ✅ **Resource Caching**: Font and template caching for faster generation
-
-## Usage
-
-1. **Upload Data**: Select an Excel (.xlsx, .xls) or CSV file with student data
-2. **Upload Template**: Upload a PNG template image
-3. **Add Fields**: 
-   - Add static text fields
-   - Add dynamic fields from Excel columns
-4. **Position Fields**: Drag fields to desired positions on the template
-5. **Customize**: Adjust font size, color, and alignment
-6. **Preview**: Use the preview dialog to check certificates
-7. **Generate**: Choose between individual PDFs (ZIP) or a single combined PDF
-
-## Project Structure
-
-```
-src/
-├── components/          # React components
-│   ├── ui/             # Reusable UI components
-│   └── providers/       # Context providers
-├── hooks/               # Custom React hooks
-│   └── use-certificate-store.ts  # Zustand store
-├── lib/                 # Utilities and services
-│   ├── constants.ts     # Application constants
-│   ├── excel-parser.ts  # Excel/CSV parsing
-│   ├── pdf/             # PDF generation
-│   └── utils.ts         # Helper functions
-└── types/               # TypeScript type definitions
-```
-
-## Constants & Configuration
-
-All application constants are centralized in `src/lib/constants.ts`:
-- Conversion factors (mm to px/pt)
-- Default values
-- Performance settings
-- Error messages
-- File validation rules
-
-## Build Optimizations
-
-The build process includes:
-- Tree shaking for unused code
-- Code splitting by vendor, PDF libraries, and UI components
-- Minification with Terser
-- Console removal in production
-- Optimized asset organization
-
-## Browser Support
-
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
-
-## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please ensure:
-- TypeScript types are properly defined
-- Error handling is comprehensive
-- Code follows the existing patterns
-- Performance optimizations are considered
